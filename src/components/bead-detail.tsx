@@ -25,10 +25,16 @@ import {
   Trash2,
   Loader2,
   Upload,
-  AlertCircle,
-  ArrowUp,
-  ArrowDown,
+  TreePine,
+  GitBranch,
+  Code,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DesignDocViewer } from "@/components/design-doc-viewer";
 import { SubtaskList } from "@/components/subtask-list";
 import { usePRStatus } from "@/hooks/use-pr-status";
@@ -127,17 +133,15 @@ function formatDate(dateString: string): string {
 
 /**
  * Format worktree path for display
+ * Shows only the worktree folder name (e.g., "bd-beads-kanban-ui-0io")
  */
 function formatWorktreePath(path: string): string {
   const match = path.match(/\.worktrees\/(.+)$/);
   if (match) {
-    return `.worktrees/${match[1]}`;
+    return match[1];
   }
   const parts = path.split("/");
-  if (parts.length >= 2) {
-    return parts.slice(-2).join("/");
-  }
-  return path;
+  return parts[parts.length - 1] || path;
 }
 
 /**
@@ -199,50 +203,49 @@ function getChecksStatusDisplay(checks: PRChecks): {
 
 /**
  * Get worktree status info for display
- * Shows ahead/behind counts and dirty status
+ * Uses fixed GitBranch icon with text/color changes based on state
  */
 function getWorktreeStatusInfo(worktreeStatus: WorktreeStatus | undefined): {
-  items: Array<{ icon: React.ReactNode; text: string; className: string }>;
+  text: string;
+  className: string;
 } {
   if (!worktreeStatus?.exists) {
-    return { items: [] };
+    return { text: "", className: "" };
   }
 
-  const items: Array<{ icon: React.ReactNode; text: string; className: string }> = [];
+  // Priority: dirty > behind > ahead > up to date
+  if (worktreeStatus.dirty) {
+    return {
+      text: "Uncommitted changes",
+      className: "text-amber-400",
+    };
+  }
 
-  if (worktreeStatus.ahead > 0) {
-    items.push({
-      icon: <ArrowUp className="size-3" aria-hidden="true" />,
-      text: `${worktreeStatus.ahead} ahead`,
-      className: "text-green-400",
-    });
+  if (worktreeStatus.behind > 0 && worktreeStatus.ahead > 0) {
+    return {
+      text: `${worktreeStatus.ahead} ahead, ${worktreeStatus.behind} behind`,
+      className: "text-amber-400",
+    };
   }
 
   if (worktreeStatus.behind > 0) {
-    items.push({
-      icon: <ArrowDown className="size-3" aria-hidden="true" />,
+    return {
       text: `${worktreeStatus.behind} behind`,
-      className: "text-amber-400",
-    });
+      className: "text-red-400",
+    };
   }
 
-  if (worktreeStatus.dirty) {
-    items.push({
-      icon: <AlertCircle className="size-3" aria-hidden="true" />,
-      text: "Uncommitted changes",
-      className: "text-amber-400",
-    });
+  if (worktreeStatus.ahead > 0) {
+    return {
+      text: `${worktreeStatus.ahead} ahead`,
+      className: "text-green-400",
+    };
   }
 
-  if (items.length === 0 && worktreeStatus.exists) {
-    items.push({
-      icon: <Check className="size-3" aria-hidden="true" />,
-      text: "Up to date",
-      className: "text-zinc-400",
-    });
-  }
-
-  return { items };
+  return {
+    text: "Up to date",
+    className: "text-zinc-400",
+  };
 }
 
 /**
@@ -402,15 +405,15 @@ export function BeadDetail({
   }, [projectPath, bead.id, onCleanup]);
 
   /**
-   * Open worktree in VS Code
+   * Open worktree in external application
    */
-  const handleOpenInIDE = useCallback(async () => {
+  const handleOpenExternal = useCallback(async (target: 'vscode' | 'cursor' | 'finder') => {
     if (!worktreeStatus?.worktree_path) return;
 
     try {
-      await api.fs.openExternal(worktreeStatus.worktree_path, "vscode");
+      await api.fs.openExternal(worktreeStatus.worktree_path, target);
     } catch (err) {
-      console.error("Failed to open in IDE:", err);
+      console.error("Failed to open:", err);
     }
   }, [worktreeStatus?.worktree_path]);
 
@@ -469,6 +472,14 @@ export function BeadDetail({
                 </div>
               </div>
 
+              {/* Created at - top right, no label */}
+              <div className="flex items-start justify-end">
+                <div className="flex items-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5 text-zinc-500" aria-hidden="true" />
+                  <span className="text-xs text-zinc-400">{formatDate(bead.created_at)}</span>
+                </div>
+              </div>
+
               {/* Type */}
               <div className="space-y-1">
                 <span className="text-zinc-500 text-xs">Type</span>
@@ -495,7 +506,7 @@ export function BeadDetail({
                     {bead.status === "closed" ? (
                       // Closed tasks: show derived path with strikethrough
                       <div className="flex items-center gap-1.5">
-                        <FolderOpen className="size-3.5 text-zinc-500 shrink-0" aria-hidden="true" />
+                        <TreePine className="size-3.5 text-zinc-500 shrink-0" aria-hidden="true" />
                         <span className="line-through text-zinc-500 font-mono text-xs">
                           {`.worktrees/bd-${bead.id}`}
                         </span>
@@ -504,32 +515,48 @@ export function BeadDetail({
                       // Active tasks with worktree: show live status
                       <>
                         <div className="flex items-center gap-1.5">
-                          <FolderOpen className="size-3.5 text-zinc-500 shrink-0" aria-hidden="true" />
+                          <TreePine className="size-3.5 text-zinc-500 shrink-0" aria-hidden="true" />
                           <span className="font-mono text-xs text-zinc-200 truncate">
                             {formatWorktreePath(worktreeStatus.worktree_path)}
                           </span>
                         </div>
-                        {/* Worktree status info */}
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                          {getWorktreeStatusInfo(worktreeStatus).items.map((item, index) => (
-                            <span
-                              key={index}
-                              className={cn("flex items-center gap-1 text-xs", item.className)}
-                            >
-                              {item.icon}
-                              {item.text}
-                            </span>
-                          ))}
+                        {/* Worktree status info - GitBranch icon with status text */}
+                        <div className="flex items-center justify-between">
+                          <span
+                            className={cn("flex items-center gap-1 text-xs", getWorktreeStatusInfo(worktreeStatus).className)}
+                          >
+                            <GitBranch className="size-3" aria-hidden="true" />
+                            {getWorktreeStatusInfo(worktreeStatus).text}
+                          </span>
+                          {/* Open in IDE dropdown - bottom right */}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                mode="icon"
+                                className="h-6 w-6 shrink-0"
+                                aria-label="Open worktree in external application"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleOpenExternal('vscode')}>
+                                <Code className="h-4 w-4" aria-hidden="true" />
+                                VS Code
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleOpenExternal('cursor')}>
+                                <Code className="h-4 w-4" aria-hidden="true" />
+                                Cursor
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleOpenExternal('finder')}>
+                                <FolderOpen className="h-4 w-4" aria-hidden="true" />
+                                Finder
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="xs"
-                          className="h-6 px-2 text-[10px] text-zinc-400 hover:text-zinc-200"
-                          onClick={handleOpenInIDE}
-                        >
-                          <ExternalLink className="size-3 mr-1" aria-hidden="true" />
-                          Open in IDE
-                        </Button>
                       </>
                     ) : (
                       // Active tasks without worktree
@@ -538,15 +565,6 @@ export function BeadDetail({
                   </div>
                 </div>
               )}
-
-              {/* Created */}
-              <div className="space-y-1">
-                <span className="text-zinc-500 text-xs">Created</span>
-                <div className="flex items-center gap-1.5">
-                  <Calendar className="h-3.5 w-3.5 text-zinc-500" aria-hidden="true" />
-                  <span className="text-xs text-zinc-200">{formatDate(bead.created_at)}</span>
-                </div>
-              </div>
             </div>
           </div>
 
