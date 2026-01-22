@@ -25,6 +25,9 @@ import {
   Trash2,
   Loader2,
   Upload,
+  AlertCircle,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { DesignDocViewer } from "@/components/design-doc-viewer";
 import { SubtaskList } from "@/components/subtask-list";
@@ -62,27 +65,11 @@ function getStatusColor(status: BeadStatus): string {
     case "in_progress":
       return "bg-amber-500/20 text-amber-400 border-amber-500/30";
     case "inreview":
-      return "bg-purple-500/20 text-purple-400 border-purple-500/30";
+      return "bg-cyan-500/20 text-cyan-400 border-cyan-500/30";
     case "closed":
       return "bg-green-500/20 text-green-400 border-green-500/30";
     default:
       return "bg-zinc-500/20 text-zinc-400 border-zinc-500/30";
-  }
-}
-
-/**
- * Get priority badge color classes based on priority level
- */
-function getPriorityColor(priority: number): string {
-  switch (priority) {
-    case 0:
-      return "bg-red-500/20 text-red-400 border-red-500/30";
-    case 1:
-      return "bg-orange-500/20 text-orange-400 border-orange-500/30";
-    case 2:
-      return "bg-zinc-500/20 text-zinc-400 border-zinc-500/30";
-    default:
-      return "bg-zinc-600/20 text-zinc-500 border-zinc-600/30";
   }
 }
 
@@ -117,16 +104,22 @@ function formatBeadId(id: string): string {
 }
 
 /**
- * Format date for display
+ * Format date for display with time (e.g., "Jan 22, 14:30" or "Jan 22, 2025, 14:30")
  */
 function formatDate(dateString: string): string {
   try {
     const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
+    const datePart = date.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: date.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
     });
+    const timePart = date.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    return `${datePart}, ${timePart}`;
   } catch {
     return dateString;
   }
@@ -202,6 +195,54 @@ function getChecksStatusDisplay(checks: PRChecks): {
   }
 
   return { icon: null, text: checksText, className: "text-zinc-400" };
+}
+
+/**
+ * Get worktree status info for display
+ * Shows ahead/behind counts and dirty status
+ */
+function getWorktreeStatusInfo(worktreeStatus: WorktreeStatus | undefined): {
+  items: Array<{ icon: React.ReactNode; text: string; className: string }>;
+} {
+  if (!worktreeStatus?.exists) {
+    return { items: [] };
+  }
+
+  const items: Array<{ icon: React.ReactNode; text: string; className: string }> = [];
+
+  if (worktreeStatus.ahead > 0) {
+    items.push({
+      icon: <ArrowUp className="size-3" aria-hidden="true" />,
+      text: `${worktreeStatus.ahead} ahead`,
+      className: "text-green-400",
+    });
+  }
+
+  if (worktreeStatus.behind > 0) {
+    items.push({
+      icon: <ArrowDown className="size-3" aria-hidden="true" />,
+      text: `${worktreeStatus.behind} behind`,
+      className: "text-amber-400",
+    });
+  }
+
+  if (worktreeStatus.dirty) {
+    items.push({
+      icon: <AlertCircle className="size-3" aria-hidden="true" />,
+      text: "Uncommitted changes",
+      className: "text-amber-400",
+    });
+  }
+
+  if (items.length === 0 && worktreeStatus.exists) {
+    items.push({
+      icon: <Check className="size-3" aria-hidden="true" />,
+      text: "Up to date",
+      className: "text-zinc-400",
+    });
+  }
+
+  return { items };
 }
 
 /**
@@ -428,24 +469,19 @@ export function BeadDetail({
                 </div>
               </div>
 
-              {/* Priority */}
-              <div className="space-y-1">
-                <span className="text-zinc-500 text-xs">Priority</span>
-                <div>
-                  <Badge
-                    variant="outline"
-                    className={cn("font-medium", getPriorityColor(bead.priority))}
-                  >
-                    P{bead.priority}
-                  </Badge>
-                </div>
-              </div>
-
               {/* Type */}
               <div className="space-y-1">
                 <span className="text-zinc-500 text-xs">Type</span>
                 <div>
-                  <Badge variant="outline" className="font-normal capitalize text-zinc-200 border-zinc-700">
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "font-normal capitalize",
+                      bead.issue_type === "task"
+                        ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30"
+                        : "text-zinc-200 border-zinc-700"
+                    )}
+                  >
                     {bead.issue_type}
                   </Badge>
                 </div>
@@ -462,6 +498,18 @@ export function BeadDetail({
                         <span className="font-mono text-xs text-zinc-200 truncate">
                           {formatWorktreePath(worktreeStatus.worktree_path)}
                         </span>
+                      </div>
+                      {/* Worktree status info */}
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        {getWorktreeStatusInfo(worktreeStatus).items.map((item, index) => (
+                          <span
+                            key={index}
+                            className={cn("flex items-center gap-1 text-xs", item.className)}
+                          >
+                            {item.icon}
+                            {item.text}
+                          </span>
+                        ))}
                       </div>
                       <Button
                         variant="ghost"
@@ -490,10 +538,10 @@ export function BeadDetail({
             </div>
           </div>
 
-          {/* Pull Request Section */}
+          {/* Worktree & PR Section */}
           {hasWorktree && projectPath && (
             <div className="mt-6">
-              <h3 className="text-sm font-semibold mb-2 text-zinc-200">Pull Request</h3>
+              <h3 className="text-sm font-semibold mb-2 text-zinc-200">Worktree & PR</h3>
               <div className="h-px bg-zinc-800 mb-3" />
 
               {/* Loading state */}
@@ -508,7 +556,7 @@ export function BeadDetail({
 
               {/* Error state */}
               {actionError && (
-                <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+                <div role="alert" className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
                   <p className="text-sm text-red-400">{actionError}</p>
                 </div>
               )}
