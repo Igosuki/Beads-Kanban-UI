@@ -487,45 +487,57 @@ export function BeadDetail({
                 </div>
               </div>
 
-              {/* Worktree */}
-              <div className="space-y-1">
-                <span className="text-zinc-500 text-xs">Worktree</span>
-                <div className="space-y-1.5">
-                  {hasWorktree && worktreeStatus?.worktree_path ? (
-                    <>
+              {/* Worktree - only show for non-epic beads */}
+              {bead.issue_type !== "epic" && (
+                <div className="space-y-1">
+                  <span className="text-zinc-500 text-xs">Worktree</span>
+                  <div className="space-y-1.5">
+                    {bead.status === "closed" ? (
+                      // Closed tasks: show derived path with strikethrough
                       <div className="flex items-center gap-1.5">
                         <FolderOpen className="size-3.5 text-zinc-500 shrink-0" aria-hidden="true" />
-                        <span className="font-mono text-xs text-zinc-200 truncate">
-                          {formatWorktreePath(worktreeStatus.worktree_path)}
+                        <span className="line-through text-zinc-500 font-mono text-xs">
+                          {`.worktrees/bd-${bead.id}`}
                         </span>
                       </div>
-                      {/* Worktree status info */}
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                        {getWorktreeStatusInfo(worktreeStatus).items.map((item, index) => (
-                          <span
-                            key={index}
-                            className={cn("flex items-center gap-1 text-xs", item.className)}
-                          >
-                            {item.icon}
-                            {item.text}
+                    ) : hasWorktree && worktreeStatus?.worktree_path ? (
+                      // Active tasks with worktree: show live status
+                      <>
+                        <div className="flex items-center gap-1.5">
+                          <FolderOpen className="size-3.5 text-zinc-500 shrink-0" aria-hidden="true" />
+                          <span className="font-mono text-xs text-zinc-200 truncate">
+                            {formatWorktreePath(worktreeStatus.worktree_path)}
                           </span>
-                        ))}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        className="h-6 px-2 text-[10px] text-zinc-400 hover:text-zinc-200"
-                        onClick={handleOpenInIDE}
-                      >
-                        <ExternalLink className="size-3 mr-1" aria-hidden="true" />
-                        Open in IDE
-                      </Button>
-                    </>
-                  ) : (
-                    <span className="text-xs text-zinc-500">No worktree</span>
-                  )}
+                        </div>
+                        {/* Worktree status info */}
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          {getWorktreeStatusInfo(worktreeStatus).items.map((item, index) => (
+                            <span
+                              key={index}
+                              className={cn("flex items-center gap-1 text-xs", item.className)}
+                            >
+                              {item.icon}
+                              {item.text}
+                            </span>
+                          ))}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          className="h-6 px-2 text-[10px] text-zinc-400 hover:text-zinc-200"
+                          onClick={handleOpenInIDE}
+                        >
+                          <ExternalLink className="size-3 mr-1" aria-hidden="true" />
+                          Open in IDE
+                        </Button>
+                      </>
+                    ) : (
+                      // Active tasks without worktree
+                      <span className="text-xs text-zinc-500">No worktree</span>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Created */}
               <div className="space-y-1">
