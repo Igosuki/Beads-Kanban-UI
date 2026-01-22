@@ -25,6 +25,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: server
+      # Create dummy out/ folder for RustEmbed (requires folder to exist at compile time)
+      - name: Create dummy out folder
+        run: mkdir -p out && echo "<html></html>" > out/index.html
       - run: cargo check --manifest-path server/Cargo.toml
       - run: cargo test --manifest-path server/Cargo.toml
       - run: cargo clippy --manifest-path server/Cargo.toml -- -D warnings
