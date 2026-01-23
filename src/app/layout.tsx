@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Space_Grotesk, Plus_Jakarta_Sans } from 'next/font/google';
 import { Toaster } from '@/components/ui/toaster';
-import { Agentation } from 'agentation';
+import { DevTools } from '@/components/dev-tools';
 import './globals.css';
 
 const spaceGrotesk = Space_Grotesk({
@@ -31,7 +31,7 @@ export default function RootLayout({
       <body className="flex min-h-screen flex-col bg-background antialiased">
         <div className="flex-1">{children}</div>
         <Toaster />
-        {process.env.NODE_ENV === 'development' && <Agentation />}
+        <DevTools />
       </body>
     </html>
   );
