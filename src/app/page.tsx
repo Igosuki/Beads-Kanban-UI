@@ -145,9 +145,20 @@ export default function ProjectsPage() {
       {/* Hero Section - pushed down with padding */}
       <main className="flex flex-col items-center px-6 pt-32">
         {/* Centered Heading with Space Grotesk */}
-        <h1 className="mb-12 text-center text-balance font-heading text-4xl font-bold tracking-tight text-white sm:text-5xl">
+        <h1 className="mb-4 text-center text-balance font-heading text-4xl font-bold tracking-tight text-white sm:text-5xl">
           Manage Your Beads Projects
         </h1>
+        <p className="text-center text-zinc-400 text-sm mb-8">
+          Highly recommended to use with the{" "}
+          <a
+            href="https://github.com/AvivK5498/Claude-Code-Beads-Orchestration"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-400 hover:text-blue-300 underline"
+          >
+            Beads Orchestration Skill
+          </a>
+        </p>
 
         <div className="w-full max-w-[1200px]">
           {/* Add Project Dropdown */}
