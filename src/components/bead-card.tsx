@@ -31,9 +31,14 @@ export interface BeadCardProps {
  * Green: PR merged or checks passed
  * Yellow/amber: checks pending
  * Red: checks failed or needs rebase
- * Gray: no PR or default state
+ * Gray: no PR or default state, or bead is closed
  */
-function getWorktreeStatusColor(worktreeStatus?: WorktreeStatus, prStatus?: PRStatus): string {
+function getWorktreeStatusColor(worktreeStatus?: WorktreeStatus, prStatus?: PRStatus, beadStatus?: string): string {
+  // Closed beads should not show colored status badges
+  if (beadStatus === 'closed') {
+    return "bg-zinc-800/50 border-zinc-700/50";
+  }
+
   if (!worktreeStatus?.exists) {
     return "bg-zinc-800/50 border-zinc-700/50";
   }
@@ -272,7 +277,7 @@ export function BeadCard({ bead, ticketNumber, branchStatus, worktreeStatus, prS
           <div
             className={cn(
               "rounded-md border p-2 space-y-1.5",
-              getWorktreeStatusColor(worktreeStatus, prStatus)
+              getWorktreeStatusColor(worktreeStatus, prStatus, bead.status)
             )}
           >
             {/* Worktree path row */}
