@@ -775,6 +775,59 @@ pub async fn create_pr(Json(request): Json<CreatePrRequest>) -> impl IntoRespons
 
     let branch_name = format!("bd-{}", request.bead_id);
 
+    // Check if a merged PR already exists for this branch
+    let check_output = Command::new("gh")
+        .args([
+            "pr",
+            "list",
+            "--head",
+            &branch_name,
+            "--state",
+            "merged",
+            "--json",
+            "number,title",
+        ])
+        .current_dir(&request.repo_path)
+        .output()
+        .await;
+
+    match check_output {
+        Ok(output) if output.status.success() => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let trimmed = stdout.trim();
+            // Parse JSON array - if non-empty, a merged PR exists
+            if !trimmed.is_empty() && trimmed != "[]" {
+                // Try to parse the JSON to get PR details
+                if let Ok(prs) = serde_json::from_str::<Vec<serde_json::Value>>(trimmed) {
+                    if let Some(pr) = prs.first() {
+                        let number = pr.get("number").and_then(|n| n.as_i64()).unwrap_or(0);
+                        let title = pr
+                            .get("title")
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("Unknown");
+                        return (
+                            StatusCode::CONFLICT,
+                            Json(CreatePrResponse {
+                                success: false,
+                                pr_number: None,
+                                pr_url: None,
+                                error: Some(format!(
+                                    "A merged PR already exists for this branch: #{} \"{}\". Clean up the worktree first.",
+                                    number, title
+                                )),
+                            }),
+                        )
+                            .into_response();
+                    }
+                }
+            }
+        }
+        Ok(_) | Err(_) => {
+            // If the check fails, we'll proceed with PR creation anyway
+            // The gh pr create command will provide its own error if needed
+        }
+    }
+
     // Create PR using gh cli
     let output = Command::new("gh")
         .args([
