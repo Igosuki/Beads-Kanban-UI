@@ -300,6 +300,52 @@ export function BeadDetail({
       .filter((b): b is Bead => b !== undefined);
   }, [isEpic, bead.children, allBeads]);
 
+  // PR status for child tasks
+  const [childPRStatuses, setChildPRStatuses] = useState<Map<string, { state: "open" | "merged" | "closed"; checks: { status: "success" | "failure" | "pending" } }>>(new Map());
+
+  // Fetch PR status for all child tasks when epic detail is open
+  useEffect(() => {
+    if (!open || !isEpic || !projectPath || childTasks.length === 0) {
+      return;
+    }
+
+    const fetchChildPRStatuses = async () => {
+      const statusMap = new Map<string, { state: "open" | "merged" | "closed"; checks: { status: "success" | "failure" | "pending" } }>();
+
+      // Fetch PR status for all children in parallel
+      const results = await Promise.all(
+        childTasks.map(async (child) => {
+          try {
+            const prStatus = await api.git.prStatus(projectPath, child.id);
+            if (prStatus.pr) {
+              return {
+                id: child.id,
+                status: {
+                  state: prStatus.pr.state,
+                  checks: { status: prStatus.pr.checks.status },
+                },
+              };
+            }
+          } catch {
+            // Ignore errors for individual children
+          }
+          return null;
+        })
+      );
+
+      // Build the map from results
+      for (const result of results) {
+        if (result) {
+          statusMap.set(result.id, result.status);
+        }
+      }
+
+      setChildPRStatuses(statusMap);
+    };
+
+    fetchChildPRStatuses();
+  }, [open, isEpic, projectPath, childTasks]);
+
   // Handle fullscreen state changes from DesignDocViewer
   const handleFullScreenChange = useCallback((isFullScreen: boolean) => {
     setIsDesignDocFullScreen(isFullScreen);
@@ -762,6 +808,7 @@ export function BeadDetail({
                   childTasks={childTasks}
                   onChildClick={onChildClick}
                   isExpanded={true}
+                  childPRStatuses={childPRStatuses}
                 />
               </div>
             </div>

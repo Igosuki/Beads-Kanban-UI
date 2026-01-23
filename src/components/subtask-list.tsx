@@ -1,8 +1,16 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { Bead, BeadStatus } from "@/types";
-import { Check, Circle, Clock, FileCheck } from "lucide-react";
+import type { Bead, BeadStatus, PRChecks } from "@/types";
+import { Check, Circle, Clock, FileCheck, GitPullRequest, GitMerge } from "lucide-react";
+
+/**
+ * PR status for a child task (used for icon display)
+ */
+export interface ChildPRStatus {
+  state: "open" | "merged" | "closed";
+  checks: { status: "success" | "failure" | "pending" };
+}
 
 export interface SubtaskListProps {
   /** Child tasks to display */
@@ -13,6 +21,8 @@ export interface SubtaskListProps {
   maxCollapsed?: number;
   /** Whether the list is expanded */
   isExpanded?: boolean;
+  /** PR status for each child task, keyed by bead ID */
+  childPRStatuses?: Map<string, ChildPRStatus>;
 }
 
 /**
@@ -50,6 +60,57 @@ function getStatusColor(status: BeadStatus): string {
 }
 
 /**
+ * Get PR status icon based on PR state and checks
+ * Returns null if no PR status (no icon shown)
+ */
+function getPRStatusIcon(prStatus: ChildPRStatus | undefined): React.ReactNode {
+  if (!prStatus) {
+    // No PR - no icon
+    return null;
+  }
+
+  if (prStatus.state === "merged") {
+    // Merged PR - purple GitMerge icon
+    return (
+      <GitMerge
+        className="h-3.5 w-3.5 text-purple-400"
+        aria-label="PR merged"
+      />
+    );
+  }
+
+  if (prStatus.state === "open") {
+    // Open PR - color based on checks status
+    if (prStatus.checks.status === "success") {
+      return (
+        <GitPullRequest
+          className="h-3.5 w-3.5 text-green-400"
+          aria-label="PR open, checks passing"
+        />
+      );
+    }
+    if (prStatus.checks.status === "failure") {
+      return (
+        <GitPullRequest
+          className="h-3.5 w-3.5 text-red-400"
+          aria-label="PR open, checks failing"
+        />
+      );
+    }
+    // Pending checks
+    return (
+      <GitPullRequest
+        className="h-3.5 w-3.5 text-amber-400"
+        aria-label="PR open, checks pending"
+      />
+    );
+  }
+
+  // Closed PR (not merged) - no icon
+  return null;
+}
+
+/**
  * Truncate text to max length
  */
 function truncate(text: string, maxLength: number): string {
@@ -64,7 +125,8 @@ export function SubtaskList({
   childTasks,
   onChildClick,
   maxCollapsed = 3,
-  isExpanded = false
+  isExpanded = false,
+  childPRStatuses,
 }: SubtaskListProps) {
   if (childTasks.length === 0) {
     return (
@@ -90,11 +152,13 @@ export function SubtaskList({
           className={cn(
             "w-full flex items-start gap-2 px-2 py-1.5 rounded-md",
             "hover:bg-zinc-800 transition-colors text-left",
+            "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-400",
             "group"
           )}
         >
-          <div className="flex-shrink-0 mt-0.5">
+          <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
             {getStatusIcon(child.status)}
+            {getPRStatusIcon(childPRStatuses?.get(child.id))}
           </div>
           <div className="flex-1 min-w-0">
             <p className={cn(
