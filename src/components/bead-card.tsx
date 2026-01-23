@@ -211,8 +211,8 @@ export function BeadCard({ bead, ticketNumber, branchStatus, worktreeStatus, prS
         "transition-[transform,border-color] duration-200",
         "hover:-translate-y-0.5 hover:border-border",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-        // Blocked indicator
-        blocked && "border-l-4 border-l-red-500",
+        // Type-based left border accent (blocked uses red, otherwise muted accent)
+        blocked ? "border-l-4 border-l-red-500" : "border-l-2 border-l-muted-foreground/30",
         // Selected state
         isSelected && "ring-2 ring-ring ring-offset-2 ring-offset-background"
       )}
@@ -357,7 +357,7 @@ function getLegacyBranchStatusLabel(status: BranchStatus): string {
   } else if (ahead > 0 && behind === 0) {
     return "Ready to merge";
   } else if (ahead === 0 && behind > 0) {
-    return "Merged";
+    return "Behind";
   }
   return "Synced";
 }

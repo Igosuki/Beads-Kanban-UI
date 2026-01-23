@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -8,10 +8,11 @@ import { cn } from "@/lib/utils";
 import { closeBead } from "@/lib/cli";
 import type { Bead, Epic, EpicProgress } from "@/types";
 import { CheckCircle2, ChevronDown, ChevronRight, Layers, Loader2, MessageSquare } from "lucide-react";
-import { SubtaskList } from "@/components/subtask-list";
+import { SubtaskList, ChildPRStatus } from "@/components/subtask-list";
 import { DependencyBadge } from "@/components/dependency-badge";
 import { DesignDocPreview } from "@/components/design-doc-preview";
 import { computeEpicProgress } from "@/lib/epic-parser";
+import * as api from "@/lib/api";
 
 export interface EpicCardProps {
   /** Epic bead with children */
@@ -73,9 +74,13 @@ function getProgressIndicatorClass(percentage: number): string {
   return "[&>*]:bg-purple-500";
 }
 
+/** Auto-refresh interval for PR statuses (30 seconds) */
+const PR_STATUS_REFRESH_INTERVAL = 30_000;
+
 /**
  * Larger epic card with distinctive styling
  */
+
 export function EpicCard({
   epic,
   allBeads,
@@ -91,14 +96,79 @@ export function EpicCard({
   const [isDesignPreviewExpanded, setIsDesignPreviewExpanded] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
 
-  // Resolve children from IDs
-  const children = (epic.children || [])
-    .map(childId => allBeads.find(b => b.id === childId))
-    .filter((b): b is Bead => b !== undefined);
+  // PR status for child tasks
+  const [childPRStatuses, setChildPRStatuses] = useState<Map<string, ChildPRStatus>>(new Map());
+  const isMountedRef = useRef(true);
+
+  // Resolve children from IDs (memoized to prevent unnecessary re-fetches)
+  const children = useMemo(() =>
+    (epic.children || [])
+      .map(childId => allBeads.find(b => b.id === childId))
+      .filter((b): b is Bead => b !== undefined),
+    [epic.children, allBeads]
+  );
+
+  // Fetch PR status for all children
+  const fetchChildPRStatuses = useCallback(async () => {
+    if (!projectPath || children.length === 0) return;
+
+    const statusMap = new Map<string, ChildPRStatus>();
+
+    // Fetch PR status for all children in parallel
+    const results = await Promise.all(
+      children.map(async (child) => {
+        try {
+          const prStatus = await api.git.prStatus(projectPath, child.id);
+          if (prStatus.pr) {
+            return {
+              id: child.id,
+              status: {
+                state: prStatus.pr.state,
+                checks: { status: prStatus.pr.checks.status },
+              } as ChildPRStatus,
+            };
+          }
+        } catch {
+          // Ignore errors for individual children
+        }
+        return null;
+      })
+    );
+
+    // Build the map from results
+    for (const result of results) {
+      if (result) {
+        statusMap.set(result.id, result.status);
+      }
+    }
+
+    // Only update state if component is still mounted
+    if (isMountedRef.current) {
+      setChildPRStatuses(statusMap);
+    }
+  }, [projectPath, children]);
+
+  // Fetch PR statuses on mount and set up auto-refresh interval
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    // Initial fetch
+    fetchChildPRStatuses();
+
+    // Set up auto-refresh interval
+    const intervalId = setInterval(() => {
+      fetchChildPRStatuses();
+    }, PR_STATUS_REFRESH_INTERVAL);
+
+    return () => {
+      isMountedRef.current = false;
+      clearInterval(intervalId);
+    };
+  }, [fetchChildPRStatuses]);
 
   const progress = computeProgress(epic, allBeads);
-  const progressPercentage = progress.total > 0 
-    ? Math.round((progress.completed / progress.total) * 100) 
+  const progressPercentage = progress.total > 0
+    ? Math.round((progress.completed / progress.total) * 100)
     : 0;
 
   const commentCount = (epic.comments ?? []).length;
@@ -134,12 +204,12 @@ export function EpicCard({
       className={cn(
         "rounded-lg cursor-pointer p-4",
         "bg-zinc-900/70 backdrop-blur-md",
-        "border border-zinc-800/60 border-l-4 border-l-purple-500",
+        "border border-zinc-800/60 border-l-2 border-l-purple-500",
         "shadow-sm shadow-black/20",
         "transition-[transform,box-shadow,border-color] duration-200",
         "hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/30",
         "hover:border-zinc-700",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]",
         isSelected && "ring-2 ring-purple-400 ring-offset-2 ring-offset-[#0a0a0a]"
       )}
       onClick={() => onSelect(epic)}
@@ -292,6 +362,7 @@ export function EpicCard({
             onChildClick={onChildClick}
             maxCollapsed={3}
             isExpanded={isExpanded}
+            childPRStatuses={childPRStatuses}
           />
         </div>
 

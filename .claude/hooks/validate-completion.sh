@@ -68,9 +68,18 @@ EOF
     fi
 
     # Git state verification for ALL tasks (including epic children)
-    REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+    REPO_ROOT=$(cd "$(git rev-parse --git-common-dir)/.." && pwd)
     WORKTREE_PATH="$REPO_ROOT/.worktrees/bd-${BEAD_ID_FROM_RESPONSE}"
 
+    # Worktree MUST exist - block if missing
+    if [[ ! -d "$WORKTREE_PATH" ]]; then
+      cat << 'EOF'
+{"decision":"block","reason":"Worktree not found at expected path. Supervisors must create worktree first.\n\nRun: curl -X POST http://localhost:3008/api/git/worktree -H 'Content-Type: application/json' -d '{\"repo_path\": \"<REPO>\", \"bead_id\": \"<BEAD_ID>\"}'"}
+EOF
+      exit 0
+    fi
+
+    # Worktree exists - verify git state
     if [[ -d "$WORKTREE_PATH" ]]; then
       # Check 1: Uncommitted changes
       UNCOMMITTED=$(git -C "$WORKTREE_PATH" status --porcelain 2>/dev/null)

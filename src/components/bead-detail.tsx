@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import type { Bead, BeadStatus, WorktreeStatus, PRStatus, PRChecks } from "@/types";
 import type { BranchStatus } from "@/lib/git";
 import {
+  AlertTriangle,
   ArrowLeft,
   FolderOpen,
   Calendar,
@@ -286,48 +287,61 @@ export function BeadDetail({
   // PR status for child tasks
   const [childPRStatuses, setChildPRStatuses] = useState<Map<string, { state: "open" | "merged" | "closed"; checks: { status: "success" | "failure" | "pending" } }>>(new Map());
 
-  // Fetch PR status for all child tasks when epic detail is open
+  // Fetch PR status for all child tasks with auto-refresh
+  const fetchChildPRStatuses = useCallback(async () => {
+    if (!projectPath || childTasks.length === 0) return;
+
+    const statusMap = new Map<string, { state: "open" | "merged" | "closed"; checks: { status: "success" | "failure" | "pending" } }>();
+
+    // Fetch PR status for all children in parallel
+    const results = await Promise.all(
+      childTasks.map(async (child) => {
+        try {
+          const prStatus = await api.git.prStatus(projectPath, child.id);
+          if (prStatus.pr) {
+            return {
+              id: child.id,
+              status: {
+                state: prStatus.pr.state,
+                checks: { status: prStatus.pr.checks.status },
+              },
+            };
+          }
+        } catch {
+          // Ignore errors for individual children
+        }
+        return null;
+      })
+    );
+
+    // Build the map from results
+    for (const result of results) {
+      if (result) {
+        statusMap.set(result.id, result.status);
+      }
+    }
+
+    setChildPRStatuses(statusMap);
+  }, [projectPath, childTasks]);
+
+  // Fetch PR status for all child tasks when epic detail is open, with 30s auto-refresh
   useEffect(() => {
     if (!open || !isEpic || !projectPath || childTasks.length === 0) {
       return;
     }
 
-    const fetchChildPRStatuses = async () => {
-      const statusMap = new Map<string, { state: "open" | "merged" | "closed"; checks: { status: "success" | "failure" | "pending" } }>();
-
-      // Fetch PR status for all children in parallel
-      const results = await Promise.all(
-        childTasks.map(async (child) => {
-          try {
-            const prStatus = await api.git.prStatus(projectPath, child.id);
-            if (prStatus.pr) {
-              return {
-                id: child.id,
-                status: {
-                  state: prStatus.pr.state,
-                  checks: { status: prStatus.pr.checks.status },
-                },
-              };
-            }
-          } catch {
-            // Ignore errors for individual children
-          }
-          return null;
-        })
-      );
-
-      // Build the map from results
-      for (const result of results) {
-        if (result) {
-          statusMap.set(result.id, result.status);
-        }
-      }
-
-      setChildPRStatuses(statusMap);
-    };
-
+    // Initial fetch
     fetchChildPRStatuses();
-  }, [open, isEpic, projectPath, childTasks]);
+
+    // Set up 30-second auto-refresh interval
+    const intervalId = setInterval(() => {
+      fetchChildPRStatuses();
+    }, 30_000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [open, isEpic, projectPath, childTasks, fetchChildPRStatuses]);
 
   // Handle fullscreen state changes from DesignDocViewer
   const handleFullScreenChange = useCallback((isFullScreen: boolean) => {
@@ -758,6 +772,14 @@ export function BeadDetail({
                         View PR
                       </a>
                     </Button>
+
+                    {/* Merge conflicts alert */}
+                    {prStatus.pr.state === "open" && !prStatus.pr.mergeable && (
+                      <span className="flex items-center gap-1.5 text-xs text-red-400">
+                        <AlertTriangle className="size-3" aria-hidden="true" />
+                        Merge conflicts
+                      </span>
+                    )}
 
                     {/* Checking CI status indicator - shown during 2s delay */}
                     {prStatus.pr.state === "open" && isCheckingCI && (

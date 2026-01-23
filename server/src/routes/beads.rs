@@ -434,9 +434,8 @@ fn compute_epic_status_from_children(child_statuses: &[&str]) -> Option<&'static
     let all_inreview_or_closed = child_statuses
         .iter()
         .all(|s| *s == "inreview" || *s == "closed");
-    let has_inreview = child_statuses.contains(&"inreview");
 
-    if all_inreview_or_closed && has_inreview {
+    if all_inreview_or_closed {
         return Some("inreview");
     }
 
@@ -678,9 +677,9 @@ mod tests {
 
     #[test]
     fn test_compute_epic_status_all_closed() {
-        // All children closed -> No change (don't auto-close epic)
+        // All children closed -> Epic should be inreview (ready for final review)
         let statuses = vec!["closed", "closed"];
-        assert_eq!(compute_epic_status_from_children(&statuses), None);
+        assert_eq!(compute_epic_status_from_children(&statuses), Some("inreview"));
     }
 
     #[test]

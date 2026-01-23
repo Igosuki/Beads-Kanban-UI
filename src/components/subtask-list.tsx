@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import type { Bead, BeadStatus, PRChecks } from "@/types";
 import { Check, Circle, Clock, FileCheck, GitPullRequest, GitMerge } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 /**
  * PR status for a child task (used for icon display)
@@ -60,10 +61,10 @@ function getStatusColor(status: BeadStatus): string {
 }
 
 /**
- * Get PR status icon based on PR state and checks
+ * Get PR status info including icon and tooltip message
  * Returns null if no PR status (no icon shown)
  */
-function getPRStatusIcon(prStatus: ChildPRStatus | undefined): React.ReactNode {
+function getPRStatusInfo(prStatus: ChildPRStatus | undefined): { icon: React.ReactNode; tooltip: string } | null {
   if (!prStatus) {
     // No PR - no icon
     return null;
@@ -71,43 +72,76 @@ function getPRStatusIcon(prStatus: ChildPRStatus | undefined): React.ReactNode {
 
   if (prStatus.state === "merged") {
     // Merged PR - purple GitMerge icon
-    return (
-      <GitMerge
-        className="h-3.5 w-3.5 text-purple-400"
-        aria-label="PR merged"
-      />
-    );
+    return {
+      icon: (
+        <GitMerge
+          className="h-3.5 w-3.5 text-purple-400"
+          aria-hidden="true"
+        />
+      ),
+      tooltip: "PR merged",
+    };
   }
 
   if (prStatus.state === "open") {
     // Open PR - color based on checks status
     if (prStatus.checks.status === "success") {
-      return (
-        <GitPullRequest
-          className="h-3.5 w-3.5 text-green-400"
-          aria-label="PR open, checks passing"
-        />
-      );
+      return {
+        icon: (
+          <GitPullRequest
+            className="h-3.5 w-3.5 text-green-400"
+            aria-hidden="true"
+          />
+        ),
+        tooltip: "PR open, checks passing",
+      };
     }
     if (prStatus.checks.status === "failure") {
-      return (
-        <GitPullRequest
-          className="h-3.5 w-3.5 text-red-400"
-          aria-label="PR open, checks failing"
-        />
-      );
+      return {
+        icon: (
+          <GitPullRequest
+            className="h-3.5 w-3.5 text-red-400"
+            aria-hidden="true"
+          />
+        ),
+        tooltip: "PR open, checks failing",
+      };
     }
     // Pending checks
-    return (
-      <GitPullRequest
-        className="h-3.5 w-3.5 text-amber-400"
-        aria-label="PR open, checks pending"
-      />
-    );
+    return {
+      icon: (
+        <GitPullRequest
+          className="h-3.5 w-3.5 text-amber-400"
+          aria-hidden="true"
+        />
+      ),
+      tooltip: "PR open, checks pending",
+    };
   }
 
   // Closed PR (not merged) - no icon
   return null;
+}
+
+/**
+ * Render PR status icon with tooltip
+ */
+function PRStatusIcon({ prStatus }: { prStatus: ChildPRStatus | undefined }) {
+  const info = getPRStatusInfo(prStatus);
+  if (!info) return null;
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="cursor-help" tabIndex={0} aria-label={info.tooltip}>{info.icon}</span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          {info.tooltip}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 /**
@@ -158,7 +192,7 @@ export function SubtaskList({
         >
           <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
             {getStatusIcon(child.status)}
-            {getPRStatusIcon(childPRStatuses?.get(child.id))}
+            <PRStatusIcon prStatus={childPRStatuses?.get(child.id)} />
           </div>
           <div className="flex-1 min-w-0">
             <p className={cn(
