@@ -293,9 +293,9 @@ export function BeadDetail({
 
     const statusMap = new Map<string, { state: "open" | "merged" | "closed"; checks: { status: "success" | "failure" | "pending" } }>();
 
-    // Fetch PR status for all children in parallel
+    // Fetch PR status for all children in parallel (skip closed - no PR needed)
     const results = await Promise.all(
-      childTasks.map(async (child) => {
+      childTasks.filter(c => c.status !== 'closed').map(async (child) => {
         try {
           const prStatus = await api.git.prStatus(projectPath, child.id);
           if (prStatus.pr) {

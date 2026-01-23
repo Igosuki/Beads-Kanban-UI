@@ -114,9 +114,9 @@ export function EpicCard({
 
     const statusMap = new Map<string, ChildPRStatus>();
 
-    // Fetch PR status for all children in parallel
+    // Fetch PR status for all children in parallel (skip closed - no PR needed)
     const results = await Promise.all(
-      children.map(async (child) => {
+      children.filter(c => c.status !== 'closed').map(async (child) => {
         try {
           const prStatus = await api.git.prStatus(projectPath, child.id);
           if (prStatus.pr) {
