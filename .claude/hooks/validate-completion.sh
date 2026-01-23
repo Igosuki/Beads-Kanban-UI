@@ -56,29 +56,10 @@ EOF
       exit 0
     fi
 
-    # Epic children skip code review - approve if completion format is correct
-    if [[ "$IS_EPIC_CHILD" == "true" ]]; then
-      # Just check for at least 1 comment
-      HAS_COMMENT=$(grep -c '"bd comment\|"command":"bd comment' "$AGENT_TRANSCRIPT" 2>/dev/null) || HAS_COMMENT=0
-      [[ -z "$HAS_COMMENT" ]] && HAS_COMMENT=0
-
-      if [[ "$HAS_COMMENT" -lt 1 ]]; then
-        cat << 'EOF'
-{"decision":"block","reason":"Child task must leave at least 1 comment.\n\nRun: bd comment {BEAD_ID} \"Completed: [brief summary]\"\n\nThis provides context for epic-level code review."}
-EOF
-        exit 0
-      fi
-
-      # Epic child approved (no code review needed)
-      echo '{"decision":"approve"}'
-      exit 0
-    fi
-
-    # Non-epic tasks: require at least 1 comment (code review removed - user tests manually)
+    # All tasks require at least 1 comment
     HAS_COMMENT=$(grep -c '"bd comment\|"command":"bd comment' "$AGENT_TRANSCRIPT" 2>/dev/null) || HAS_COMMENT=0
     [[ -z "$HAS_COMMENT" ]] && HAS_COMMENT=0
 
-    # Check for at least 1 comment
     if [[ "$HAS_COMMENT" -lt 1 ]]; then
       cat << 'EOF'
 {"decision":"block","reason":"Supervisor must leave at least 1 comment on the bead.\n\nRun: bd comment {BEAD_ID} \"Completed: [brief summary of work done]\"\n\nComments provide context for code review and future reference."}
@@ -86,42 +67,44 @@ EOF
       exit 0
     fi
 
-    # Git state verification for non-epic-child tasks
-    if [[ "$IS_EPIC_CHILD" == "false" ]]; then
-      REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-      WORKTREE_PATH="$REPO_ROOT/.worktrees/bd-${BEAD_ID_FROM_RESPONSE}"
+    # Git state verification for ALL tasks (including epic children)
+    REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+    WORKTREE_PATH="$REPO_ROOT/.worktrees/bd-${BEAD_ID_FROM_RESPONSE}"
 
-      if [[ -d "$WORKTREE_PATH" ]]; then
-        # Check 1: Uncommitted changes
-        UNCOMMITTED=$(git -C "$WORKTREE_PATH" status --porcelain 2>/dev/null)
-        if [[ -n "$UNCOMMITTED" ]]; then
-          cat << 'EOF'
+    if [[ -d "$WORKTREE_PATH" ]]; then
+      # Check 1: Uncommitted changes
+      UNCOMMITTED=$(git -C "$WORKTREE_PATH" status --porcelain 2>/dev/null)
+      if [[ -n "$UNCOMMITTED" ]]; then
+        cat << 'EOF'
 {"decision":"block","reason":"Worktree has uncommitted changes.\n\nRun in worktree:\n  git add -A && git commit -m \"...\"\n\nThen report completion."}
 EOF
-          exit 0
-        fi
+        exit 0
+      fi
 
-        # Check 2: Remote push (only if remote exists)
-        HAS_REMOTE=$(git -C "$WORKTREE_PATH" remote get-url origin 2>/dev/null)
-        if [[ -n "$HAS_REMOTE" ]]; then
-          BRANCH="bd-${BEAD_ID_FROM_RESPONSE}"
-          REMOTE_EXISTS=$(git -C "$WORKTREE_PATH" ls-remote --heads origin "$BRANCH" 2>/dev/null)
-          if [[ -z "$REMOTE_EXISTS" ]]; then
-            cat << 'EOF'
+      # Check 2: Remote push (only if remote exists)
+      HAS_REMOTE=$(git -C "$WORKTREE_PATH" remote get-url origin 2>/dev/null)
+      if [[ -n "$HAS_REMOTE" ]]; then
+        BRANCH="bd-${BEAD_ID_FROM_RESPONSE}"
+        REMOTE_EXISTS=$(git -C "$WORKTREE_PATH" ls-remote --heads origin "$BRANCH" 2>/dev/null)
+        if [[ -z "$REMOTE_EXISTS" ]]; then
+          cat << 'EOF'
 {"decision":"block","reason":"Branch not pushed to remote.\n\nRun in worktree:\n  git push -u origin bd-{BEAD_ID}\n\nThen report completion."}
 EOF
-            exit 0
-          fi
-        fi
-
-        # Check 3: Bead status
-        BEAD_STATUS=$(bd show "$BEAD_ID_FROM_RESPONSE" --json 2>/dev/null | jq -r '.[0].status // "unknown"')
-        if [[ "$BEAD_STATUS" != "inreview" ]]; then
-          cat << EOF
-{"decision":"block","reason":"Bead status is '${BEAD_STATUS}', not 'inreview'.\n\nRun: bd update ${BEAD_ID_FROM_RESPONSE} --status inreview\n\nThen report completion."}
-EOF
           exit 0
         fi
+      fi
+
+      # Check 3: Bead status (different expected status for epic children vs standalone)
+      BEAD_STATUS=$(bd show "$BEAD_ID_FROM_RESPONSE" --json 2>/dev/null | jq -r '.[0].status // "unknown"')
+      EXPECTED_STATUS="inreview"
+      if [[ "$IS_EPIC_CHILD" == "true" ]]; then
+        EXPECTED_STATUS="done"
+      fi
+      if [[ "$BEAD_STATUS" != "$EXPECTED_STATUS" ]]; then
+        cat << EOF
+{"decision":"block","reason":"Bead status is '${BEAD_STATUS}', not '${EXPECTED_STATUS}'.\n\nRun: bd update ${BEAD_ID_FROM_RESPONSE} --status ${EXPECTED_STATUS}\n\nThen report completion."}
+EOF
+        exit 0
       fi
     fi
   fi

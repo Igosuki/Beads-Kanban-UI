@@ -61,11 +61,23 @@ If the orchestrator's approach would break something, explain what you found and
 </during-implementation>
 
 <on-completion>
-1. Final commit: `git add -A && git commit -m "..."`
-2. Push branch: `git push origin bd-{BEAD_ID}`
-3. Add comment: `bd comment {BEAD_ID} "Completed: [summary]"`
-4. Mark inreview: `bd update {BEAD_ID} --status inreview`
-5. Return completion summary to orchestrator
+WARNING: YOU WILL BE BLOCKED if you skip any step. Execute ALL in order:
+
+1. `git add -A && git commit -m "..."` - Commit all changes
+2. `git push origin bd-{BEAD_ID}` - Push to remote
+3. `bd comment {BEAD_ID} "Completed: [summary]"` - Leave comment
+4. `bd update {BEAD_ID} --status inreview` - Mark inreview
+
+ONLY AFTER all 4 steps succeed, return:
+```
+BEAD {BEAD_ID} COMPLETE
+Worktree: .worktrees/bd-{BEAD_ID}
+Files: [names]
+Tests: pass
+Summary: [1 sentence]
+```
+
+The SubagentStop hook verifies: uncommitted changes, remote push, bead status.
 </on-completion>
 
 <banned>
