@@ -1398,9 +1398,11 @@ async fn rebase_single_worktree(worktree_path: &str, bead_id: &str) -> RebaseSib
 
     match rebase_output {
         Ok(output) if output.status.success() => {
-            // Rebase succeeded, force push
+            // Rebase succeeded, force push with explicit branch name
+            // (branch may not have upstream tracking configured)
+            let branch_name = format!("bd-{}", bead_id);
             let push_output = Command::new("git")
-                .args(["push", "--force-with-lease"])
+                .args(["push", "origin", &branch_name, "--force-with-lease"])
                 .current_dir(worktree_path)
                 .output()
                 .await;
