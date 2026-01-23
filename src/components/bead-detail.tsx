@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import type { Bead, BeadStatus, WorktreeStatus, PRStatus, PRChecks } from "@/types";
 import type { BranchStatus } from "@/lib/git";
 import {
+  AlertTriangle,
   ArrowLeft,
   FolderOpen,
   Calendar,
@@ -771,6 +772,14 @@ export function BeadDetail({
                         View PR
                       </a>
                     </Button>
+
+                    {/* Merge conflicts alert */}
+                    {prStatus.pr.state === "open" && !prStatus.pr.mergeable && (
+                      <span className="flex items-center gap-1.5 text-xs text-red-400">
+                        <AlertTriangle className="size-3" aria-hidden="true" />
+                        Merge conflicts
+                      </span>
+                    )}
 
                     {/* Checking CI status indicator - shown during 2s delay */}
                     {prStatus.pr.state === "open" && isCheckingCI && (
