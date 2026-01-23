@@ -28,6 +28,7 @@ import {
   TreePine,
   GitBranch,
   Code,
+  RefreshCw,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -37,6 +38,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { DesignDocViewer } from "@/components/design-doc-viewer";
 import { SubtaskList } from "@/components/subtask-list";
+import { Skeleton } from "@/components/ui/skeleton";
 import { usePRStatus } from "@/hooks/use-pr-status";
 import * as api from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
@@ -280,6 +282,7 @@ export function BeadDetail({
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   const [isRebasingSiblings, setIsRebasingSiblings] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [isRefreshingPR, setIsRefreshingPR] = useState(false);
 
   // Fetch PR status when detail panel is open and we have a worktree
   const hasWorktree = worktreeStatus?.exists ?? false;
@@ -652,16 +655,45 @@ export function BeadDetail({
           {/* Worktree & PR Section */}
           {hasWorktree && projectPath && (
             <div className="mt-6">
-              <h3 className="text-sm font-semibold mb-2 text-zinc-200">Worktree & PR</h3>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-zinc-200">Worktree & PR</h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  mode="icon"
+                  className="h-6 w-6 -mr-1"
+                  onClick={async () => {
+                    setIsRefreshingPR(true);
+                    try {
+                      await refreshPRStatus();
+                    } finally {
+                      setIsRefreshingPR(false);
+                    }
+                  }}
+                  disabled={isPRStatusLoading || isRefreshingPR}
+                  aria-label="Refresh PR status"
+                >
+                  <RefreshCw
+                    className={cn(
+                      "size-3.5",
+                      (isPRStatusLoading || isRefreshingPR) && "animate-spin"
+                    )}
+                  />
+                </Button>
+              </div>
               <div className="h-px bg-zinc-800 mb-3" />
 
               {/* Loading state */}
               {isPRStatusLoading && (
-                <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-                  <div className="flex items-center gap-2 text-sm text-zinc-400">
-                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                    <span>Loading PR status...</span>
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="size-4 rounded" />
+                      <Skeleton className="h-4 w-16" />
+                    </div>
+                    <Skeleton className="h-4 w-10" />
                   </div>
+                  <Skeleton className="h-8 w-24" />
                 </div>
               )}
 
