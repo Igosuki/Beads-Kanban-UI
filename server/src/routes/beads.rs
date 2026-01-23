@@ -142,7 +142,7 @@ pub async fn read_beads(Query(params): Query<BeadsParams>) -> impl IntoResponse 
     let mut parent_to_children: std::collections::HashMap<String, Vec<String>> =
         std::collections::HashMap::new();
 
-    // First pass: Extract parent-child relationships and set parent_id
+    // First pass: Extract parent-child relationships from explicit dependencies
     for bead in &mut beads {
         if let Some(deps) = &bead.dependencies {
             for dep in deps {
@@ -159,7 +159,46 @@ pub async fn read_beads(Query(params): Query<BeadsParams>) -> impl IntoResponse 
         }
     }
 
-    // Second pass: Set children on parent beads
+    // Second pass: Infer parent-child from ID patterns (e.g., "64n.1" -> parent "64n")
+    // This matches how the bd CLI infers relationships when parent_id is not set
+    // Collect existing bead IDs first to avoid borrow issues
+    let bead_ids: std::collections::HashSet<String> =
+        beads.iter().map(|b| b.id.clone()).collect();
+
+    // Collect inferred relationships: (child_id, parent_id)
+    let inferred: Vec<(String, String)> = beads
+        .iter()
+        .filter_map(|bead| {
+            // Only infer if parent_id is not already set
+            if bead.parent_id.is_some() {
+                return None;
+            }
+            // Check if ID contains a dot (indicating potential child)
+            let dot_pos = bead.id.rfind('.')?;
+            let potential_parent = &bead.id[..dot_pos];
+            // Only infer if the parent exists
+            if bead_ids.contains(potential_parent) {
+                Some((bead.id.clone(), potential_parent.to_string()))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Apply inferred relationships
+    for (child_id, inferred_parent_id) in &inferred {
+        // Set parent_id on the child bead
+        if let Some(bead) = beads.iter_mut().find(|b| &b.id == child_id) {
+            bead.parent_id = Some(inferred_parent_id.clone());
+        }
+        // Record in parent_to_children map
+        parent_to_children
+            .entry(inferred_parent_id.clone())
+            .or_default()
+            .push(child_id.clone());
+    }
+
+    // Third pass: Set children on parent beads
     for bead in &mut beads {
         if let Some(children) = parent_to_children.get(&bead.id) {
             bead.children = Some(children.clone());
@@ -455,6 +494,7 @@ pub fn recompute_epic_statuses(issues_path: &Path) -> Result<Vec<String>, String
     // parent_id -> Vec<child_id>
     let mut parent_to_children: HashMap<String, Vec<String>> = HashMap::new();
 
+    // First pass: Extract from explicit dependencies
     for bead in &beads {
         if let Some(deps) = &bead.dependencies {
             for dep in deps {
@@ -463,6 +503,29 @@ pub fn recompute_epic_statuses(issues_path: &Path) -> Result<Vec<String>, String
                         .entry(dep.depends_on_id.clone())
                         .or_default()
                         .push(bead.id.clone());
+                }
+            }
+        }
+    }
+
+    // Second pass: Infer parent-child from ID patterns (e.g., "64n.1" -> parent "64n")
+    // This matches how the bd CLI infers relationships when parent_id is not set
+    let bead_ids: std::collections::HashSet<String> =
+        beads.iter().map(|b| b.id.clone()).collect();
+
+    for bead in &beads {
+        // Only infer if not already in parent_to_children
+        if bead.parent_id.is_none() && bead.id.contains('.') {
+            if let Some(dot_pos) = bead.id.rfind('.') {
+                let potential_parent = &bead.id[..dot_pos];
+                // Only infer if parent exists and not already recorded
+                if bead_ids.contains(potential_parent) {
+                    let children = parent_to_children
+                        .entry(potential_parent.to_string())
+                        .or_default();
+                    if !children.contains(&bead.id) {
+                        children.push(bead.id.clone());
+                    }
                 }
             }
         }
@@ -650,5 +713,35 @@ mod tests {
             compute_epic_status_from_children(&statuses),
             Some("inreview")
         );
+    }
+
+    #[test]
+    fn test_infer_parent_from_id_pattern() {
+        // Test the ID pattern inference logic
+        // Bead "64n.1" should be inferred as child of "64n" if parent exists
+        let bead_id = "64n.1";
+        let dot_pos = bead_id.rfind('.');
+        assert!(dot_pos.is_some());
+        let parent_id = &bead_id[..dot_pos.unwrap()];
+        assert_eq!(parent_id, "64n");
+    }
+
+    #[test]
+    fn test_infer_parent_multiple_dots() {
+        // Test that we extract the correct parent when ID has multiple dots
+        // Bead "prefix.64n.1" should have parent "prefix.64n"
+        let bead_id = "prefix.64n.1";
+        let dot_pos = bead_id.rfind('.');
+        assert!(dot_pos.is_some());
+        let parent_id = &bead_id[..dot_pos.unwrap()];
+        assert_eq!(parent_id, "prefix.64n");
+    }
+
+    #[test]
+    fn test_no_inference_without_dot() {
+        // Bead without dot should not have inferred parent
+        let bead_id = "simple-id";
+        let dot_pos = bead_id.rfind('.');
+        assert!(dot_pos.is_none());
     }
 }
