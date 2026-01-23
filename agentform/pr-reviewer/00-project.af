@@ -1,0 +1,4 @@
+agentform {
+  version = "0.1"
+  project = "beads-kanban-pr-reviewer"
+}

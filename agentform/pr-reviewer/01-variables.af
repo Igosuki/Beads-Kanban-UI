@@ -1,0 +1,11 @@
+variable "anthropic_api_key" {
+  type        = string
+  description = "Anthropic API key for Claude model access"
+  sensitive   = true
+}
+
+variable "github_personal_access_token" {
+  type        = string
+  description = "GitHub Personal Access Token with repo and pull_request scopes"
+  sensitive   = true
+}

@@ -1,0 +1,11 @@
+# Example input for the review_pr workflow
+# Copy this file to input.yaml and fill in your values
+
+# GitHub repository owner (username or organization)
+owner: "your-org"
+
+# Repository name
+repo: "beads-kanban-ui"
+
+# Pull request number to review
+pull_number: 42

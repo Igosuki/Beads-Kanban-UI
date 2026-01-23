@@ -1,0 +1,8 @@
+server "github" {
+  command = "npx"
+  args    = ["-y", "@anthropic/mcp-server-github"]
+
+  env = {
+    GITHUB_PERSONAL_ACCESS_TOKEN = var.github_personal_access_token
+  }
+}

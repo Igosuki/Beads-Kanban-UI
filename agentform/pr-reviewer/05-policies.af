@@ -1,0 +1,15 @@
+policy "review_policy" {
+  description = "Policy for thorough PR review operations"
+
+  max_cost_usd_per_run   = 0.50
+  max_capability_calls   = 15
+  timeout_seconds        = 300
+}
+
+policy "triage_policy" {
+  description = "Policy for quick PR classification operations"
+
+  max_cost_usd_per_run   = 0.05
+  max_capability_calls   = 3
+  timeout_seconds        = 30
+}

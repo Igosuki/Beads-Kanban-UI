@@ -1,0 +1,20 @@
+capability "get_pr" {
+  server      = server.github
+  description = "Fetch pull request metadata including title, description, author, and status"
+}
+
+capability "list_pr_files" {
+  server      = server.github
+  description = "List all files changed in a pull request with their status (added, modified, deleted)"
+}
+
+capability "get_file_contents" {
+  server      = server.github
+  description = "Retrieve the contents of a specific file at a given ref"
+}
+
+capability "create_review" {
+  server            = server.github
+  description       = "Submit a review comment on a pull request"
+  requires_approval = true
+}

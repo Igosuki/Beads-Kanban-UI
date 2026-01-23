@@ -1,0 +1,173 @@
+workflow "review_pr" {
+  description = "Automated PR review workflow with human-in-the-loop approval"
+
+  input {
+    owner       = string
+    repo        = string
+    pull_number = number
+  }
+
+  step "fetch_pr" {
+    agent = agent.classifier
+
+    action {
+      capability = capability.get_pr
+      params = {
+        owner       = input.owner
+        repo        = input.repo
+        pull_number = input.pull_number
+      }
+    }
+
+    output {
+      pr_data = result
+    }
+  }
+
+  step "fetch_files" {
+    agent    = agent.classifier
+    depends  = [step.fetch_pr]
+
+    action {
+      capability = capability.list_pr_files
+      params = {
+        owner       = input.owner
+        repo        = input.repo
+        pull_number = input.pull_number
+      }
+    }
+
+    output {
+      files = result
+    }
+  }
+
+  step "classify" {
+    agent   = agent.classifier
+    depends = [step.fetch_pr, step.fetch_files]
+
+    prompt = <<-EOT
+      Classify this PR:
+
+      Title: ${step.fetch_pr.pr_data.title}
+      Description: ${step.fetch_pr.pr_data.body}
+
+      Files changed: ${length(step.fetch_files.files)}
+      ${join("\n", [for f in step.fetch_files.files : "- ${f.filename} (${f.status}, +${f.additions}/-${f.deletions})"])}
+
+      Output: TRIVIAL, SIMPLE, or COMPLEX with justification.
+    EOT
+
+    output {
+      complexity = extract_first_word(result)
+    }
+  }
+
+  step "route_by_complexity" {
+    type    = "router"
+    depends = [step.classify]
+
+    routes = {
+      trivial = step.classify.complexity == "TRIVIAL"
+      review  = step.classify.complexity != "TRIVIAL"
+    }
+  }
+
+  step "auto_approve" {
+    agent   = agent.classifier
+    depends = [step.route_by_complexity]
+    condition = step.route_by_complexity.route == "trivial"
+
+    action {
+      capability = capability.create_review
+      params = {
+        owner       = input.owner
+        repo        = input.repo
+        pull_number = input.pull_number
+        event       = "APPROVE"
+        body        = "Auto-approved: ${step.classify.complexity} change. ${step.classify.result}"
+      }
+    }
+
+    terminal = true
+  }
+
+  step "analyze" {
+    agent   = agent.reviewer
+    depends = [step.route_by_complexity]
+    condition = step.route_by_complexity.route == "review"
+
+    prompt = <<-EOT
+      Review this ${step.classify.complexity} PR:
+
+      Title: ${step.fetch_pr.pr_data.title}
+      Description: ${step.fetch_pr.pr_data.body}
+      Author: ${step.fetch_pr.pr_data.user.login}
+
+      Files to review:
+      ${join("\n", [for f in step.fetch_files.files : "- ${f.filename}"])}
+
+      For each file with substantive changes, fetch its contents and review according to your criteria.
+
+      Provide a structured review with:
+      1. Summary (1-2 sentences)
+      2. Issues found (categorized as CRITICAL/WARNING/SUGGESTION)
+      3. Recommendation: APPROVE, REQUEST_CHANGES, or COMMENT
+    EOT
+
+    output {
+      review_body    = result
+      recommendation = extract_recommendation(result)
+    }
+  }
+
+  step "approval" {
+    type    = "human"
+    depends = [step.analyze]
+
+    prompt = <<-EOT
+      PR Review Ready for Submission
+
+      Repository: ${input.owner}/${input.repo}
+      PR #${input.pull_number}: ${step.fetch_pr.pr_data.title}
+
+      Recommended action: ${step.analyze.recommendation}
+
+      Review content:
+      ${step.analyze.review_body}
+
+      Do you approve submitting this review?
+    EOT
+
+    on_approve = step.submit_review
+    on_reject  = step.end_rejected
+  }
+
+  step "submit_review" {
+    agent   = agent.reviewer
+    depends = [step.approval]
+
+    action {
+      capability = capability.create_review
+      params = {
+        owner       = input.owner
+        repo        = input.repo
+        pull_number = input.pull_number
+        event       = step.analyze.recommendation
+        body        = step.analyze.review_body
+      }
+    }
+
+    terminal = true
+  }
+
+  step "end_rejected" {
+    type     = "terminal"
+    depends  = [step.approval]
+
+    output {
+      status  = "rejected"
+      message = "Review submission was rejected by human reviewer"
+    }
+  }
+}
