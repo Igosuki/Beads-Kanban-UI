@@ -1261,6 +1261,40 @@ pub struct RebaseSiblingResult {
 pub struct RebaseSiblingsResponse {
     /// Results for each sibling worktree.
     pub results: Vec<RebaseSiblingResult>,
+    /// Bead IDs that were skipped (not in 'inreview' status).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub skipped: Vec<String>,
+}
+
+/// Minimal bead structure for status checking.
+#[derive(Deserialize)]
+struct BeadStatus {
+    id: String,
+    status: String,
+}
+
+/// Get the status of a bead from the issues.jsonl file.
+///
+/// Returns None if the bead is not found or the file cannot be read.
+fn get_bead_status(repo_path: &Path, bead_id: &str) -> Option<String> {
+    let issues_path = repo_path.join(".beads").join("issues.jsonl");
+
+    let contents = std::fs::read_to_string(&issues_path).ok()?;
+
+    for line in contents.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        if let Ok(bead) = serde_json::from_str::<BeadStatus>(line) {
+            if bead.id == bead_id {
+                return Some(bead.status);
+            }
+        }
+    }
+
+    None
 }
 
 /// Rebase all sibling worktrees onto latest origin/main.
@@ -1340,6 +1374,7 @@ pub async fn rebase_siblings(Json(request): Json<RebaseSiblingsRequest>) -> impl
         .collect();
 
     let mut results = Vec::new();
+    let mut skipped = Vec::new();
 
     // Fetch latest from origin once (in main repo)
     let fetch_output = Command::new("git")
@@ -1358,18 +1393,31 @@ pub async fn rebase_siblings(Json(request): Json<RebaseSiblingsRequest>) -> impl
             .into_response();
     }
 
-    // Rebase each sibling
+    // Rebase each sibling that is in 'inreview' status
     for sibling in siblings {
         let bead_id = match sibling.bead_id {
             Some(id) => id,
             None => continue,
         };
 
+        // Only rebase beads that are in 'inreview' status
+        // Skip beads that are in_progress, open, or have unknown status
+        let status = get_bead_status(repo_path, &bead_id);
+        if status.as_deref() != Some("inreview") {
+            tracing::info!(
+                "Skipping rebase for bead {} (status: {:?})",
+                bead_id,
+                status
+            );
+            skipped.push(bead_id);
+            continue;
+        }
+
         let result = rebase_single_worktree(&sibling.path, &bead_id).await;
         results.push(result);
     }
 
-    Json(RebaseSiblingsResponse { results }).into_response()
+    Json(RebaseSiblingsResponse { results, skipped }).into_response()
 }
 
 /// Rebase a single worktree onto origin/main.
@@ -1605,5 +1653,74 @@ mod tests {
         assert_eq!(checks.pending, 0);
         assert_eq!(checks.failed, 0);
         assert_eq!(checks.status, "success");
+    }
+
+    #[test]
+    fn test_get_bead_status_parses_jsonl() {
+        use std::io::Write;
+        use tempfile::tempdir;
+
+        // Create a temporary directory with a .beads/issues.jsonl file
+        let temp_dir = tempdir().unwrap();
+        let beads_dir = temp_dir.path().join(".beads");
+        std::fs::create_dir(&beads_dir).unwrap();
+        let issues_path = beads_dir.join("issues.jsonl");
+
+        let mut file = std::fs::File::create(&issues_path).unwrap();
+        writeln!(file, r#"{{"id": "BD-001", "title": "Test 1", "status": "inreview"}}"#).unwrap();
+        writeln!(file, r#"{{"id": "BD-002", "title": "Test 2", "status": "in_progress"}}"#).unwrap();
+        writeln!(file, r#"{{"id": "BD-003", "title": "Test 3", "status": "open"}}"#).unwrap();
+
+        // Test finding existing beads
+        assert_eq!(
+            get_bead_status(temp_dir.path(), "BD-001"),
+            Some("inreview".to_string())
+        );
+        assert_eq!(
+            get_bead_status(temp_dir.path(), "BD-002"),
+            Some("in_progress".to_string())
+        );
+        assert_eq!(
+            get_bead_status(temp_dir.path(), "BD-003"),
+            Some("open".to_string())
+        );
+
+        // Test non-existent bead
+        assert_eq!(get_bead_status(temp_dir.path(), "BD-999"), None);
+    }
+
+    #[test]
+    fn test_get_bead_status_missing_file() {
+        use tempfile::tempdir;
+
+        let temp_dir = tempdir().unwrap();
+        // No .beads directory - should return None gracefully
+        assert_eq!(get_bead_status(temp_dir.path(), "BD-001"), None);
+    }
+
+    #[test]
+    fn test_rebase_siblings_response_with_skipped() {
+        let response = RebaseSiblingsResponse {
+            results: vec![RebaseSiblingResult {
+                bead_id: "BD-001".to_string(),
+                success: true,
+                error: None,
+            }],
+            skipped: vec!["BD-002".to_string(), "BD-003".to_string()],
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"skipped\":[\"BD-002\",\"BD-003\"]"));
+        assert!(json.contains("\"bead_id\":\"BD-001\""));
+    }
+
+    #[test]
+    fn test_rebase_siblings_response_empty_skipped() {
+        let response = RebaseSiblingsResponse {
+            results: vec![],
+            skipped: vec![],
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        // skipped should not appear in JSON when empty due to skip_serializing_if
+        assert!(!json.contains("skipped"));
     }
 }

@@ -29,6 +29,31 @@ fi
 
 [[ "$IS_SUBAGENT" == "true" ]] && exit 0
 
+# Block nested worktree creation (worktree inside another worktree)
+if [[ "$TOOL_NAME" == "Bash" ]]; then
+  COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+
+  # Check for curl to worktree API or git worktree add with nested path
+  if [[ "$COMMAND" == *"worktree"* ]] && [[ "$COMMAND" == *".worktrees/"*"/.worktrees/"* ]]; then
+    cat << EOF
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Nested worktree detected. Cannot create worktree inside another worktree.\n\nUse the main repo path: /path/to/repo (not /path/to/repo/.worktrees/bd-xxx)"}}
+EOF
+    exit 0
+  fi
+
+  # Check for curl worktree API with repo_path pointing inside a worktree
+  if [[ "$COMMAND" == *"curl"* ]] && [[ "$COMMAND" == *"/api/git/worktree"* ]]; then
+    # Extract repo_path from JSON payload
+    REPO_PATH=$(echo "$COMMAND" | grep -oE '"repo_path"[[:space:]]*:[[:space:]]*"[^"]+"' | sed 's/.*"\([^"]*\)"$/\1/')
+    if [[ "$REPO_PATH" == *"/.worktrees/"* ]]; then
+      cat << EOF
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Nested worktree detected. repo_path points inside a worktree.\n\nUse the main repo path, not a worktree path."}}
+EOF
+      exit 0
+    fi
+  fi
+fi
+
 # DENYLIST: Block implementation tools for orchestrator
 BLOCKED="Edit|Write|NotebookEdit"
 
