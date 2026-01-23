@@ -125,7 +125,8 @@ export default function KanbanBoard() {
 
   // @deprecated: Branch statuses are deprecated. TODO: migrate to useWorktreeStatuses
   // Fetch branch statuses for all beads (legacy - for backward compatibility)
-  const beadIds = useMemo(() => beads.map((b) => b.id), [beads]);
+  // Filter out closed beads to avoid unnecessary polling for finalized tasks
+  const beadIds = useMemo(() => beads.filter(b => b.status !== 'closed').map(b => b.id), [beads]);
   const { statuses: branchStatuses } = useBranchStatuses(
     project?.path ?? "",
     beadIds
