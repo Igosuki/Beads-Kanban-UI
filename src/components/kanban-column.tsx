@@ -31,6 +31,8 @@ export interface KanbanColumnProps {
   onNavigateToDependency?: (beadId: string) => void;
   /** Project root path for fetching design docs */
   projectPath?: string;
+  /** Callback after data changes (to refresh board) */
+  onUpdate?: () => void;
 }
 
 /**
@@ -110,6 +112,7 @@ export function KanbanColumn({
   onChildClick,
   onNavigateToDependency,
   projectPath,
+  onUpdate,
 }: KanbanColumnProps) {
   return (
     <div
@@ -149,6 +152,7 @@ export function KanbanColumn({
                   onChildClick={onChildClick ?? onSelectBead}
                   onNavigateToDependency={onNavigateToDependency}
                   projectPath={projectPath}
+                  onUpdate={onUpdate}
                 />
               );
             }

@@ -351,6 +351,7 @@ export default function KanbanBoard() {
                 onChildClick={handleChildClick}
                 onNavigateToDependency={handleNavigateToDependency}
                 projectPath={project?.path}
+                onUpdate={refreshBeads}
               />
             ))}
           </div>

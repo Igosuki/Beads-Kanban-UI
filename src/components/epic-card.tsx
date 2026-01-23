@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import { closeBead } from "@/lib/cli";
 import type { Bead, Epic, EpicProgress } from "@/types";
-import { ChevronDown, ChevronRight, Layers, MessageSquare } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, Layers, Loader2, MessageSquare } from "lucide-react";
 import { SubtaskList } from "@/components/subtask-list";
 import { DependencyBadge } from "@/components/dependency-badge";
 import { DesignDocPreview } from "@/components/design-doc-preview";
@@ -28,6 +30,8 @@ export interface EpicCardProps {
   onNavigateToDependency?: (beadId: string) => void;
   /** Project root path for fetching design docs */
   projectPath?: string;
+  /** Callback after epic is closed (to refresh board) */
+  onUpdate?: () => void;
 }
 
 /**
@@ -80,10 +84,12 @@ export function EpicCard({
   onSelect,
   onChildClick,
   onNavigateToDependency,
-  projectPath
+  projectPath,
+  onUpdate
 }: EpicCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isDesignPreviewExpanded, setIsDesignPreviewExpanded] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
 
   // Resolve children from IDs
   const children = (epic.children || [])
@@ -97,6 +103,27 @@ export function EpicCard({
 
   const commentCount = (epic.comments ?? []).length;
   const hasDesignDoc = !!epic.design_doc;
+
+  // Show Close Epic button when all children are complete and epic is in review
+  const canCloseEpic = progressPercentage === 100 && epic.status === 'inreview';
+
+  /**
+   * Handle closing the epic
+   */
+  const handleCloseEpic = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isClosing) return;
+
+    setIsClosing(true);
+    try {
+      await closeBead(epic.id, projectPath);
+      onUpdate?.();
+    } catch (error) {
+      console.error('Failed to close epic:', error);
+    } finally {
+      setIsClosing(false);
+    }
+  };
 
   return (
     <div
@@ -192,6 +219,26 @@ export function EpicCard({
             )}
           </div>
         </div>
+
+        {/* Close Epic Button - shown when all children complete and status is inreview */}
+        {canCloseEpic && (
+          <div className="pt-2">
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={handleCloseEpic}
+              disabled={isClosing}
+              className="w-full border-green-500/30 text-green-400 hover:bg-green-500/10 hover:text-green-300"
+            >
+              {isClosing ? (
+                <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+              ) : (
+                <CheckCircle2 className="size-3" aria-hidden="true" />
+              )}
+              {isClosing ? 'Closing…' : 'Close Epic'}
+            </Button>
+          </div>
+        )}
 
         {/* Design Doc Preview */}
         {hasDesignDoc && projectPath && (
