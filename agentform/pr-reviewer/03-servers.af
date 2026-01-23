@@ -1,8 +1,9 @@
 server "github" {
-  command = "npx"
-  args    = ["-y", "@anthropic/mcp-server-github"]
+  type      = "mcp"
+  transport = "stdio"
+  command   = ["npx", "-y", "@modelcontextprotocol/server-github"]
 
-  env = {
-    GITHUB_PERSONAL_ACCESS_TOKEN = var.github_personal_access_token
+  auth {
+    token = var.github_personal_access_token
   }
 }
