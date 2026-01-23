@@ -357,7 +357,7 @@ function getLegacyBranchStatusLabel(status: BranchStatus): string {
   } else if (ahead > 0 && behind === 0) {
     return "Ready to merge";
   } else if (ahead === 0 && behind > 0) {
-    return "Merged";
+    return "Behind";
   }
   return "Synced";
 }
