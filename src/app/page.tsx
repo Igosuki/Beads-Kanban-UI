@@ -122,16 +122,7 @@ export default function ProjectsPage() {
     <div className="dark flex min-h-dvh flex-col bg-[#0a0a0a]">
       {/* Navigation Bar */}
       <nav className="sticky top-0 z-30 border-b border-zinc-800 bg-[#0a0a0a]/80 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-[1200px] items-center justify-center gap-4 px-6 py-2">
-          <a
-            href="https://github.com/AvivK5498/Beads-Kanban-UI"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="GitHub repository"
-            className="rounded-md p-2 text-zinc-400 transition-colors duration-150 hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]"
-          >
-            <Github className="h-5 w-5" aria-hidden="true" />
-          </a>
+        <div className="mx-auto flex max-w-[1200px] items-center justify-center px-6 py-2">
           <Link
             href="/settings"
             aria-label="Settings"
@@ -317,7 +308,7 @@ export default function ProjectsPage() {
       </main>
 
       {/* Footer */}
-      <footer className="mt-auto border-t border-zinc-800 py-6">
+      <footer className="mt-auto border-t border-zinc-800 py-3">
         <div className="mx-auto flex max-w-[1200px] items-center justify-center gap-4 px-6">
           <a
             href="https://github.com/AvivK5498/beads-kanban-ui"
