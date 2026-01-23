@@ -26,7 +26,6 @@ import {
   Loader2,
   Upload,
   TreePine,
-  GitBranch,
   Code,
   RefreshCw,
   Layers,
@@ -223,52 +222,6 @@ function getChecksStatusDisplay(checks: PRChecks): {
   return { icon: null, text: checksText, className: "text-zinc-400" };
 }
 
-/**
- * Get worktree status info for display
- * Uses fixed GitBranch icon with text/color changes based on state
- */
-function getWorktreeStatusInfo(worktreeStatus: WorktreeStatus | undefined): {
-  text: string;
-  className: string;
-} {
-  if (!worktreeStatus?.exists) {
-    return { text: "", className: "" };
-  }
-
-  // Priority: dirty > behind > ahead > up to date
-  if (worktreeStatus.dirty) {
-    return {
-      text: "Uncommitted changes",
-      className: "text-amber-400",
-    };
-  }
-
-  if (worktreeStatus.behind > 0 && worktreeStatus.ahead > 0) {
-    return {
-      text: `${worktreeStatus.ahead} ahead, ${worktreeStatus.behind} behind`,
-      className: "text-amber-400",
-    };
-  }
-
-  if (worktreeStatus.behind > 0) {
-    return {
-      text: `${worktreeStatus.behind} behind`,
-      className: "text-red-400",
-    };
-  }
-
-  if (worktreeStatus.ahead > 0) {
-    return {
-      text: `${worktreeStatus.ahead} ahead`,
-      className: "text-green-400",
-    };
-  }
-
-  return {
-    text: "Up to date",
-    className: "text-zinc-400",
-  };
-}
 
 /**
  * Bead detail sheet component - slides in from the right
