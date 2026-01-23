@@ -286,48 +286,61 @@ export function BeadDetail({
   // PR status for child tasks
   const [childPRStatuses, setChildPRStatuses] = useState<Map<string, { state: "open" | "merged" | "closed"; checks: { status: "success" | "failure" | "pending" } }>>(new Map());
 
-  // Fetch PR status for all child tasks when epic detail is open
+  // Fetch PR status for all child tasks with auto-refresh
+  const fetchChildPRStatuses = useCallback(async () => {
+    if (!projectPath || childTasks.length === 0) return;
+
+    const statusMap = new Map<string, { state: "open" | "merged" | "closed"; checks: { status: "success" | "failure" | "pending" } }>();
+
+    // Fetch PR status for all children in parallel
+    const results = await Promise.all(
+      childTasks.map(async (child) => {
+        try {
+          const prStatus = await api.git.prStatus(projectPath, child.id);
+          if (prStatus.pr) {
+            return {
+              id: child.id,
+              status: {
+                state: prStatus.pr.state,
+                checks: { status: prStatus.pr.checks.status },
+              },
+            };
+          }
+        } catch {
+          // Ignore errors for individual children
+        }
+        return null;
+      })
+    );
+
+    // Build the map from results
+    for (const result of results) {
+      if (result) {
+        statusMap.set(result.id, result.status);
+      }
+    }
+
+    setChildPRStatuses(statusMap);
+  }, [projectPath, childTasks]);
+
+  // Fetch PR status for all child tasks when epic detail is open, with 30s auto-refresh
   useEffect(() => {
     if (!open || !isEpic || !projectPath || childTasks.length === 0) {
       return;
     }
 
-    const fetchChildPRStatuses = async () => {
-      const statusMap = new Map<string, { state: "open" | "merged" | "closed"; checks: { status: "success" | "failure" | "pending" } }>();
-
-      // Fetch PR status for all children in parallel
-      const results = await Promise.all(
-        childTasks.map(async (child) => {
-          try {
-            const prStatus = await api.git.prStatus(projectPath, child.id);
-            if (prStatus.pr) {
-              return {
-                id: child.id,
-                status: {
-                  state: prStatus.pr.state,
-                  checks: { status: prStatus.pr.checks.status },
-                },
-              };
-            }
-          } catch {
-            // Ignore errors for individual children
-          }
-          return null;
-        })
-      );
-
-      // Build the map from results
-      for (const result of results) {
-        if (result) {
-          statusMap.set(result.id, result.status);
-        }
-      }
-
-      setChildPRStatuses(statusMap);
-    };
-
+    // Initial fetch
     fetchChildPRStatuses();
-  }, [open, isEpic, projectPath, childTasks]);
+
+    // Set up 30-second auto-refresh interval
+    const intervalId = setInterval(() => {
+      fetchChildPRStatuses();
+    }, 30_000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [open, isEpic, projectPath, childTasks, fetchChildPRStatuses]);
 
   // Handle fullscreen state changes from DesignDocViewer
   const handleFullScreenChange = useCallback((isFullScreen: boolean) => {
