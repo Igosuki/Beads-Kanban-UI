@@ -107,12 +107,12 @@ export function EpicCard({
       className={cn(
         "rounded-lg cursor-pointer p-4",
         "bg-zinc-900/70 backdrop-blur-md",
-        "border border-zinc-800/60 border-l-4 border-l-purple-500",
+        "border border-zinc-800/60 border-l-2 border-l-purple-500",
         "shadow-sm shadow-black/20",
         "transition-[transform,box-shadow,border-color] duration-200",
         "hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/30",
         "hover:border-zinc-700",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]",
         isSelected && "ring-2 ring-purple-400 ring-offset-2 ring-offset-[#0a0a0a]"
       )}
       onClick={() => onSelect(epic)}

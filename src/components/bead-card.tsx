@@ -199,7 +199,7 @@ export function BeadCard({ bead, ticketNumber, branchStatus, worktreeStatus, prS
         "hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/30",
         "hover:border-zinc-700",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]",
-        blocked ? "border-l-4 border-l-red-500" : "border-l-4 border-l-transparent",
+        blocked ? "border-l-4 border-l-red-500" : "border-l-2 border-l-zinc-500",
         isSelected && "ring-2 ring-zinc-400 ring-offset-2 ring-offset-[#0a0a0a]"
       )}
       onClick={() => onSelect(bead)}
@@ -229,7 +229,7 @@ export function BeadCard({ bead, ticketNumber, branchStatus, worktreeStatus, prS
               </Badge>
             )}
             <Badge
-              className="text-[10px] px-1.5 py-0 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+              className="text-[10px] px-1.5 py-0 bg-zinc-500/20 text-zinc-400 border border-zinc-500/30"
             >
               Task
             </Badge>
