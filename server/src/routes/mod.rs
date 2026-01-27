@@ -7,6 +7,7 @@ pub mod beads;
 pub mod cli;
 pub mod fs;
 pub mod git;
+pub mod memory;
 pub mod projects;
 pub mod watch;
 pub mod worktree;

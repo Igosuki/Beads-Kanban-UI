@@ -128,6 +128,14 @@ async fn main() {
         .route("/api/git/create-pr", post(routes::worktree::create_pr))
         .route("/api/git/merge-pr", post(routes::worktree::merge_pr))
         .route("/api/git/rebase-siblings", post(routes::worktree::rebase_siblings))
+        // Memory endpoints
+        .route(
+            "/api/memory",
+            get(routes::memory::list_memory)
+                .put(routes::memory::update_memory)
+                .delete(routes::memory::delete_memory),
+        )
+        .route("/api/memory/stats", get(routes::memory::memory_stats))
         .route("/api/watch/beads", get(routes::watch_beads))
         .fallback(serve_static)
         .layer(cors);
