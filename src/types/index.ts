@@ -261,6 +261,36 @@ export interface PRStatus {
 }
 
 // ============================================================================
+// PR Files Types
+// ============================================================================
+
+/**
+ * File status from GitHub API for PR file changes
+ */
+export type PRFileStatus = 'added' | 'removed' | 'modified' | 'renamed' | 'copied' | 'changed' | 'unchanged';
+
+/**
+ * A single file entry in a PR's changed files list
+ */
+export interface PRFileEntry {
+  filename: string;
+  status: PRFileStatus;
+  additions: number;
+  deletions: number;
+  changes: number;
+}
+
+/**
+ * Response from GET /api/git/pr-files
+ */
+export interface PRFilesResponse {
+  files: PRFileEntry[];
+  total_additions: number;
+  total_deletions: number;
+  total_files: number;
+}
+
+// ============================================================================
 // Memory Types
 // ============================================================================
 

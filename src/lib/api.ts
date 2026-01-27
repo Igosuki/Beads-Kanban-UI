@@ -3,7 +3,7 @@
  * Replaces Tauri invoke() calls with HTTP fetch to backend
  */
 
-import type { Project, Tag, Bead, WorktreeStatus, WorktreeEntry, PRStatus, MemoryResponse, MemoryStats, MemoryEntry } from '@/types';
+import type { Project, Tag, Bead, WorktreeStatus, WorktreeEntry, PRStatus, PRFilesResponse, MemoryResponse, MemoryStats, MemoryEntry } from '@/types';
 
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3008';
 
@@ -258,6 +258,10 @@ export const git = {
   // PR endpoints
   prStatus: (repoPath: string, beadId: string) => fetchApi<PRStatus>(
     `/api/git/pr-status?repo_path=${encodeURIComponent(repoPath)}&bead_id=${encodeURIComponent(beadId)}`
+  ),
+
+  prFiles: (repoPath: string, beadId: string) => fetchApi<PRFilesResponse>(
+    `/api/git/pr-files?repo_path=${encodeURIComponent(repoPath)}&bead_id=${encodeURIComponent(beadId)}`
   ),
 
   createPR: (repoPath: string, beadId: string, title: string, body: string) =>

@@ -10,7 +10,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { Bead, BeadStatus, WorktreeStatus, PRStatus, PRChecks } from "@/types";
+import type { Bead, BeadStatus, WorktreeStatus, PRStatus, PRChecks, PRFilesResponse } from "@/types";
+import { PRFilesList } from "@/components/pr-files-list";
 import type { BranchStatus } from "@/lib/git";
 import {
   AlertTriangle,
@@ -262,6 +263,10 @@ export function BeadDetail({
   const [isRebasingSiblings, setIsRebasingSiblings] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isRefreshingPR, setIsRefreshingPR] = useState(false);
+
+  // PR files state
+  const [prFiles, setPrFiles] = useState<PRFilesResponse | null>(null);
+  const [isPrFilesLoading, setIsPrFilesLoading] = useState(false);
 
   // Merge button delay state - wait for CI checks to load before showing merge button
   const [mergeButtonReady, setMergeButtonReady] = useState(false);
@@ -552,6 +557,39 @@ export function BeadDetail({
     autoCleanupTriggered.current = false;
   }, [bead.id]);
 
+  // Fetch PR files when PR exists and is open (not merged)
+  useEffect(() => {
+    if (!projectPath || !prStatus?.pr || prStatus.pr.state !== "open") {
+      setPrFiles(null);
+      return;
+    }
+
+    let cancelled = false;
+    setIsPrFilesLoading(true);
+
+    api.git.prFiles(projectPath, bead.id)
+      .then((data) => {
+        if (!cancelled) {
+          setPrFiles(data);
+        }
+      })
+      .catch(() => {
+        // Silently ignore - the file list is supplementary info
+        if (!cancelled) {
+          setPrFiles(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPrFilesLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectPath, bead.id, prStatus?.pr?.state, prStatus?.pr?.number]);
+
   /**
    * Open worktree in external application
    */
@@ -810,6 +848,26 @@ export function BeadDetail({
                         </div>
                       </div>
                     </div>
+                  )}
+
+                  {/* PR Files Changed */}
+                  {prStatus.pr.state === "open" && isPrFilesLoading && (
+                    <div className="space-y-2">
+                      <Skeleton className="h-3.5 w-28" />
+                      <div className="space-y-1">
+                        <Skeleton className="h-6 w-full" />
+                        <Skeleton className="h-6 w-full" />
+                        <Skeleton className="h-6 w-3/4" />
+                      </div>
+                    </div>
+                  )}
+                  {prStatus.pr.state === "open" && prFiles && prFiles.files.length > 0 && (
+                    <PRFilesList
+                      files={prFiles.files}
+                      totalAdditions={prFiles.total_additions}
+                      totalDeletions={prFiles.total_deletions}
+                      totalFiles={prFiles.total_files}
+                    />
                   )}
 
                   {/* Action Buttons */}
