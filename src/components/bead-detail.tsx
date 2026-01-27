@@ -23,6 +23,7 @@ import {
   X,
   Clock,
   GitMerge,
+  Link2,
   Trash2,
   Loader2,
   Upload,
@@ -292,6 +293,15 @@ export function BeadDetail({
       .map(childId => allBeads.find(b => b.id === childId))
       .filter((b): b is Bead => b !== undefined);
   }, [isEpic, bead.children, allBeads]);
+
+  // Resolve related tasks from IDs (skip unknown IDs gracefully)
+  const relatedTasks = useMemo(() => {
+    if (!allBeads || !bead.relates_to || bead.relates_to.length === 0) return [];
+    const beadMap = new Map(allBeads.map(b => [b.id, b]));
+    return bead.relates_to
+      .map(id => beadMap.get(id))
+      .filter((b): b is Bead => b !== undefined);
+  }, [bead.relates_to, allBeads]);
 
   // PR status for child tasks
   const [childPRStatuses, setChildPRStatuses] = useState<Map<string, { state: "open" | "merged" | "closed"; checks: { status: "success" | "failure" | "pending" } }>>(new Map());
@@ -904,6 +914,55 @@ export function BeadDetail({
               <div className="h-px bg-zinc-800 mb-3" />
               <div className="text-sm text-zinc-400 leading-relaxed whitespace-pre-wrap">
                 {bead.description}
+              </div>
+            </div>
+          )}
+
+          {/* Related Tasks */}
+          {relatedTasks.length > 0 && onChildClick && (
+            <div className="mt-6">
+              <h3 className="text-sm font-semibold mb-2 text-zinc-200 flex items-center gap-1.5">
+                <Link2 className="size-3.5" aria-hidden="true" />
+                Related Tasks ({relatedTasks.length})
+              </h3>
+              <div className="h-px bg-zinc-800 mb-3" />
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
+                <div className="space-y-1">
+                  {relatedTasks.map((related) => (
+                    <button
+                      key={related.id}
+                      onClick={() => onChildClick(related)}
+                      aria-label={`Open related task: ${related.title}`}
+                      className={cn(
+                        "w-full flex items-center gap-2 px-2 py-1.5 rounded-md",
+                        "hover:bg-zinc-800 transition-colors text-left",
+                        "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-400",
+                        "group"
+                      )}
+                    >
+                      <Circle
+                        className={cn("size-2 flex-shrink-0 fill-current", getStatusDotColor(related.status))}
+                        aria-hidden="true"
+                      />
+                      <span className="text-[10px] font-mono text-zinc-500 flex-shrink-0">
+                        {formatBeadId(related.id)}
+                      </span>
+                      <span className={cn(
+                        "text-xs font-medium flex-1 min-w-0 truncate group-hover:underline",
+                        related.status === "closed" ? "line-through text-zinc-500" : "text-zinc-200"
+                      )}>
+                        {related.title}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        size="xs"
+                        className="flex-shrink-0"
+                      >
+                        {formatStatus(related.status)}
+                      </Badge>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}

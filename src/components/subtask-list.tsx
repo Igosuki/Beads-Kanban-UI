@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import type { Bead, BeadStatus, PRChecks } from "@/types";
-import { Check, Circle, Clock, FileCheck, GitPullRequest, GitMerge } from "lucide-react";
+import { Check, Circle, Clock, FileCheck, GitPullRequest, GitMerge, Link2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 /**
@@ -208,6 +208,12 @@ export function SubtaskList({
               </p>
             )}
           </div>
+          {(child.relates_to ?? []).length > 0 && (
+            <span className="flex items-center gap-0.5 flex-shrink-0 text-muted-foreground">
+              <Link2 className="size-3" aria-hidden="true" />
+              <span className="text-[9px] tabular-nums">{child.relates_to!.length}</span>
+            </span>
+          )}
           <div className={cn(
             "flex-shrink-0 text-[9px] font-medium uppercase tracking-wide",
             getStatusColor(child.status)

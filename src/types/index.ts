@@ -55,6 +55,7 @@ export interface Bead {
   design_doc?: string;        // Path like ".designs/{EPIC_ID}.md"
   deps?: string[];            // Dependency IDs (blocking this task)
   blockers?: string[];        // COMPUTED: Tasks this blocks (derived from deps relationships)
+  relates_to?: string[];      // Bead IDs with relates-to links (bidirectional "see also")
 }
 
 /**

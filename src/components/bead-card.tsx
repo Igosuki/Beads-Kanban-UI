@@ -11,7 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { Bead, WorktreeStatus, PRStatus } from "@/types";
 import type { BranchStatus } from "@/lib/git";
-import { FolderOpen, GitPullRequest, MessageSquare, Check, X, Clock } from "lucide-react";
+import { FolderOpen, GitPullRequest, Link2, MessageSquare, Check, X, Clock } from "lucide-react";
 
 export interface BeadCardProps {
   bead: Bead;
@@ -191,6 +191,7 @@ function getTypeLabel(bead: Bead): string {
 export function BeadCard({ bead, ticketNumber, branchStatus, worktreeStatus, prStatus, isSelected = false, onSelect }: BeadCardProps) {
   const blocked = isBlocked(bead);
   const commentCount = (bead.comments ?? []).length;
+  const relatedCount = (bead.relates_to ?? []).length;
 
   // Prefer worktree status over branch status
   const hasWorktree = worktreeStatus?.exists ?? false;
@@ -319,13 +320,21 @@ export function BeadCard({ bead, ticketNumber, branchStatus, worktreeStatus, prS
         </div>
       )}
 
-      {/* Footer: comment count */}
-      {commentCount > 0 && (
+      {/* Footer: comment count + related count */}
+      {(commentCount > 0 || relatedCount > 0) && (
         <CardFooter className="p-3 pt-0 gap-2 text-muted-foreground">
-          <span className="flex items-center gap-1 text-[10px]">
-            <MessageSquare className="size-3" aria-hidden="true" />
-            {commentCount} {commentCount === 1 ? "comment" : "comments"}
-          </span>
+          {commentCount > 0 && (
+            <span className="flex items-center gap-1 text-[10px]">
+              <MessageSquare className="size-3" aria-hidden="true" />
+              {commentCount} {commentCount === 1 ? "comment" : "comments"}
+            </span>
+          )}
+          {relatedCount > 0 && (
+            <span className="flex items-center gap-1 text-[10px]">
+              <Link2 className="size-3" aria-hidden="true" />
+              {relatedCount} related
+            </span>
+          )}
         </CardFooter>
       )}
     </Card>
