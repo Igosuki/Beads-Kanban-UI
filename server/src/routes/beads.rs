@@ -65,6 +65,8 @@ pub struct Bead {
     pub design_doc: Option<String>,
     #[serde(default)]
     pub deps: Option<Vec<String>>,
+    #[serde(default)]
+    pub relates_to: Option<Vec<String>>,
     #[serde(default, skip_serializing)]
     dependencies: Option<Vec<Dependency>>,
 }
@@ -202,6 +204,20 @@ pub async fn read_beads(Query(params): Query<BeadsParams>) -> impl IntoResponse 
     for bead in &mut beads {
         if let Some(children) = parent_to_children.get(&bead.id) {
             bead.children = Some(children.clone());
+        }
+    }
+
+    // Fourth pass: Extract relates-to dependencies into relates_to field
+    for bead in &mut beads {
+        if let Some(deps) = &bead.dependencies {
+            let related: Vec<String> = deps
+                .iter()
+                .filter(|dep| dep.dep_type == "relates-to")
+                .map(|dep| dep.depends_on_id.clone())
+                .collect();
+            if !related.is_empty() {
+                bead.relates_to = Some(related);
+            }
         }
     }
 
@@ -742,5 +758,160 @@ mod tests {
         let bead_id = "simple-id";
         let dot_pos = bead_id.rfind('.');
         assert!(dot_pos.is_none());
+    }
+
+    #[test]
+    fn test_parse_bead_with_relates_to_dependencies() {
+        // Test that relates-to dependencies are deserialized from the dependencies array
+        let json = r#"{"id":"bead-a","title":"Bead A","status":"open","dependencies":[{"issue_id":"bead-a","depends_on_id":"bead-b","type":"relates-to","created_at":"2026-01-27T00:00:00Z","created_by":"user"},{"issue_id":"bead-a","depends_on_id":"bead-c","type":"relates-to","created_at":"2026-01-27T00:00:00Z","created_by":"user"}]}"#;
+        let bead: Bead = serde_json::from_str(json).unwrap();
+        let deps = bead.dependencies.unwrap();
+        assert_eq!(deps.len(), 2);
+        assert_eq!(deps[0].dep_type, "relates-to");
+        assert_eq!(deps[0].depends_on_id, "bead-b");
+        assert_eq!(deps[1].dep_type, "relates-to");
+        assert_eq!(deps[1].depends_on_id, "bead-c");
+    }
+
+    #[test]
+    fn test_relates_to_extraction_logic() {
+        // Test the fourth pass extraction logic that populates relates_to from dependencies
+        let mut bead = Bead {
+            id: "bead-a".to_string(),
+            title: "Bead A".to_string(),
+            description: None,
+            status: "open".to_string(),
+            priority: None,
+            issue_type: None,
+            owner: None,
+            created_at: None,
+            created_by: None,
+            updated_at: None,
+            closed_at: None,
+            close_reason: None,
+            comments: None,
+            parent_id: None,
+            children: None,
+            design_doc: None,
+            deps: None,
+            relates_to: None,
+            dependencies: Some(vec![
+                Dependency {
+                    depends_on_id: "bead-b".to_string(),
+                    dep_type: "relates-to".to_string(),
+                },
+                Dependency {
+                    depends_on_id: "bead-parent".to_string(),
+                    dep_type: "parent-child".to_string(),
+                },
+                Dependency {
+                    depends_on_id: "bead-c".to_string(),
+                    dep_type: "relates-to".to_string(),
+                },
+            ]),
+        };
+
+        // Simulate the fourth pass extraction logic
+        if let Some(deps) = &bead.dependencies {
+            let related: Vec<String> = deps
+                .iter()
+                .filter(|dep| dep.dep_type == "relates-to")
+                .map(|dep| dep.depends_on_id.clone())
+                .collect();
+            if !related.is_empty() {
+                bead.relates_to = Some(related);
+            }
+        }
+
+        // Verify only relates-to deps are extracted, not parent-child
+        let relates_to = bead.relates_to.unwrap();
+        assert_eq!(relates_to.len(), 2);
+        assert_eq!(relates_to[0], "bead-b");
+        assert_eq!(relates_to[1], "bead-c");
+    }
+
+    #[test]
+    fn test_relates_to_none_when_no_relates_to_deps() {
+        // Test that relates_to stays None when there are no relates-to dependencies
+        let mut bead = Bead {
+            id: "bead-x".to_string(),
+            title: "Bead X".to_string(),
+            description: None,
+            status: "open".to_string(),
+            priority: None,
+            issue_type: None,
+            owner: None,
+            created_at: None,
+            created_by: None,
+            updated_at: None,
+            closed_at: None,
+            close_reason: None,
+            comments: None,
+            parent_id: None,
+            children: None,
+            design_doc: None,
+            deps: None,
+            relates_to: None,
+            dependencies: Some(vec![Dependency {
+                depends_on_id: "bead-parent".to_string(),
+                dep_type: "parent-child".to_string(),
+            }]),
+        };
+
+        // Simulate the fourth pass extraction logic
+        if let Some(deps) = &bead.dependencies {
+            let related: Vec<String> = deps
+                .iter()
+                .filter(|dep| dep.dep_type == "relates-to")
+                .map(|dep| dep.depends_on_id.clone())
+                .collect();
+            if !related.is_empty() {
+                bead.relates_to = Some(related);
+            }
+        }
+
+        // No relates-to deps, so relates_to should remain None
+        assert!(bead.relates_to.is_none());
+    }
+
+    #[test]
+    fn test_relates_to_serialized_in_json() {
+        // Test that relates_to is included in serialized JSON output
+        // (unlike dependencies which has skip_serializing)
+        let bead = Bead {
+            id: "bead-s".to_string(),
+            title: "Serialization Test".to_string(),
+            description: None,
+            status: "open".to_string(),
+            priority: None,
+            issue_type: None,
+            owner: None,
+            created_at: None,
+            created_by: None,
+            updated_at: None,
+            closed_at: None,
+            close_reason: None,
+            comments: None,
+            parent_id: None,
+            children: None,
+            design_doc: None,
+            deps: None,
+            relates_to: Some(vec!["bead-r1".to_string(), "bead-r2".to_string()]),
+            dependencies: Some(vec![Dependency {
+                depends_on_id: "bead-r1".to_string(),
+                dep_type: "relates-to".to_string(),
+            }]),
+        };
+
+        let json = serde_json::to_string(&bead).unwrap();
+
+        // relates_to SHOULD be serialized
+        assert!(json.contains("relates_to"));
+        assert!(json.contains("bead-r1"));
+        assert!(json.contains("bead-r2"));
+
+        // dependencies should NOT be serialized (skip_serializing)
+        assert!(!json.contains("dependencies"));
+        assert!(!json.contains("depends_on_id"));
     }
 }
