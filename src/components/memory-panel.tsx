@@ -87,6 +87,23 @@ function formatRelativeTime(ts: number): string {
 }
 
 /**
+ * Format a memory entry's bead ID to a short display form.
+ * Handles IDs like "beads-kanban-ui-t25.2" -> "BD-t25.2"
+ * or "project-p02" -> "BD-p02"
+ */
+function formatMemoryBeadId(id: string): string {
+  if (id.startsWith("BD-") || id.startsWith("bd-")) {
+    return id.length > 10 ? `BD-${id.slice(-6)}` : id.toUpperCase();
+  }
+  // Extract the part after the last hyphen (handles dots for epic children)
+  const lastDash = id.lastIndexOf("-");
+  if (lastDash !== -1) {
+    return `BD-${id.slice(lastDash + 1)}`;
+  }
+  return `BD-${id.slice(0, 6)}`;
+}
+
+/**
  * Single memory entry card
  */
 function MemoryEntryCard({
@@ -103,7 +120,7 @@ function MemoryEntryCard({
   onNavigate?: (beadId: string) => void;
 }) {
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 space-y-2">
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 space-y-2 overflow-hidden">
       {/* Top row: type badge, timestamp */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
@@ -132,8 +149,8 @@ function MemoryEntryCard({
 
       {/* Bottom row: tags, bead link, actions menu */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-          {entry.tags.slice(0, 4).map((tag) => (
+        <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+          {entry.tags.slice(0, 3).map((tag) => (
             <Badge
               key={tag}
               variant="secondary"
@@ -144,9 +161,9 @@ function MemoryEntryCard({
               {tag}
             </Badge>
           ))}
-          {entry.tags.length > 4 && (
-            <span className="text-xs text-zinc-600">
-              +{entry.tags.length - 4}
+          {entry.tags.length > 3 && (
+            <span className="text-xs text-zinc-600 shrink-0">
+              +{entry.tags.length - 3}
             </span>
           )}
         </div>
@@ -157,12 +174,13 @@ function MemoryEntryCard({
               type="button"
               onClick={() => onNavigate?.(entry.bead)}
               className={cn(
-                "text-xs font-mono text-zinc-500 hover:text-zinc-300 transition-colors rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                "text-xs font-mono text-zinc-500 hover:text-zinc-300 transition-colors rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring truncate max-w-[120px]",
                 !onNavigate && "pointer-events-none"
               )}
+              title={entry.bead}
               aria-label={`Navigate to bead ${entry.bead}`}
             >
-              {entry.bead}
+              {formatMemoryBeadId(entry.bead)}
             </button>
           )}
 
