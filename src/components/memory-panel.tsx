@@ -87,20 +87,6 @@ function formatRelativeTime(ts: number): string {
 }
 
 /**
- * Format bead ID for display (shortened)
- */
-function formatBeadLink(beadId: string): string {
-  if (!beadId) return "";
-  // Show last segment: "project-id.3" -> "BD-..3" or keep short IDs as-is
-  const parts = beadId.split("-");
-  if (parts.length > 2) {
-    const last = parts[parts.length - 1];
-    return `BD-${last.toUpperCase()}`;
-  }
-  return beadId.toUpperCase();
-}
-
-/**
  * Single memory entry card
  */
 function MemoryEntryCard({
@@ -118,7 +104,7 @@ function MemoryEntryCard({
 }) {
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 space-y-2">
-      {/* Top row: type badge, key, timestamp */}
+      {/* Top row: type badge, timestamp */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           {entry.type === "learned" ? (
@@ -130,9 +116,6 @@ function MemoryEntryCard({
               INVES
             </Badge>
           )}
-          <span className="text-xs font-mono text-zinc-500 truncate">
-            {entry.key}
-          </span>
         </div>
         <time
           dateTime={new Date(entry.ts * 1000).toISOString()}
@@ -179,7 +162,7 @@ function MemoryEntryCard({
               )}
               aria-label={`Navigate to bead ${entry.bead}`}
             >
-              {formatBeadLink(entry.bead)}
+              {entry.bead}
             </button>
           )}
 
@@ -376,7 +359,7 @@ export function MemoryPanel({
             <SheetDescription className="text-zinc-500">
               {stats
                 ? `${stats.total} ${stats.total === 1 ? "entry" : "entries"}`
-                : "Loading\u2026"}
+                : "Loading..."}
             </SheetDescription>
           </SheetHeader>
 
@@ -389,7 +372,7 @@ export function MemoryPanel({
             <Input
               type="text"
               aria-label="Search memories"
-              placeholder="Search memories\u2026"
+              placeholder="Search memories..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-8 pr-8 h-8 bg-zinc-800/50 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
@@ -560,7 +543,7 @@ export function MemoryPanel({
                 value={editTags}
                 onChange={(e) => setEditTags(e.target.value)}
                 className="bg-zinc-800/50 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
-                placeholder="tag1, tag2, tag3\u2026"
+                placeholder="tag1, tag2, tag3..."
               />
             </div>
           </div>
