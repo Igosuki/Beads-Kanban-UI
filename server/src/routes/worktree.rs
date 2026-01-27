@@ -996,6 +996,214 @@ pub async fn merge_pr(Json(request): Json<MergePrRequest>) -> impl IntoResponse 
 }
 
 // ============================================================================
+// PR Files Endpoint
+// ============================================================================
+
+/// Query parameters for the PR files endpoint.
+#[derive(Deserialize)]
+pub struct PrFilesParams {
+    /// Path to the git repository.
+    pub repo_path: String,
+    /// Bead ID to get PR files for.
+    pub bead_id: String,
+}
+
+/// A single file entry from a PR's changed files.
+#[derive(Serialize)]
+pub struct PrFileEntry {
+    /// Path of the file relative to the repo root.
+    pub filename: String,
+    /// Change status: "added", "removed", "modified", "renamed", "copied", "changed", "unchanged".
+    pub status: String,
+    /// Number of lines added.
+    pub additions: i32,
+    /// Number of lines deleted.
+    pub deletions: i32,
+    /// Total number of line changes (additions + deletions).
+    pub changes: i32,
+}
+
+/// Response body for the PR files endpoint.
+#[derive(Serialize)]
+pub struct PrFilesResponse {
+    /// List of changed files.
+    pub files: Vec<PrFileEntry>,
+    /// Total additions across all files.
+    pub total_additions: i32,
+    /// Total deletions across all files.
+    pub total_deletions: i32,
+    /// Total number of changed files.
+    pub total_files: i32,
+}
+
+/// Get the list of changed files for a PR associated with a bead's branch.
+///
+/// # Endpoint
+///
+/// `GET /api/git/pr-files?repo_path=...&bead_id=...`
+///
+/// # Response
+///
+/// Returns the list of changed files with additions/deletions and totals.
+pub async fn pr_files(Query(params): Query<PrFilesParams>) -> impl IntoResponse {
+    let repo_path = Path::new(&params.repo_path);
+
+    // Validate repository path exists
+    if !repo_path.exists() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": format!("Repository path does not exist: {}", params.repo_path)
+            })),
+        )
+            .into_response();
+    }
+
+    let branch_name = format!("bd-{}", params.bead_id);
+
+    // Step 1: Get the PR number via gh pr view
+    let pr_number = match get_pr_number(&params.repo_path, &branch_name).await {
+        Some(n) => n,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "error": format!("No PR found for branch {}", branch_name)
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    // Step 2: Get the repo owner/name (nwo = name with owner)
+    let nwo = match get_repo_nwo(&params.repo_path).await {
+        Some(n) => n,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Failed to determine repository owner/name"
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    // Step 3: Fetch PR files using gh api
+    let api_path = format!("repos/{}/pulls/{}/files?per_page=100", nwo, pr_number);
+    let output = Command::new("gh")
+        .args(["api", &api_path])
+        .current_dir(&params.repo_path)
+        .output()
+        .await;
+
+    match output {
+        Ok(output) if output.status.success() => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            match serde_json::from_str::<Vec<serde_json::Value>>(&stdout) {
+                Ok(file_entries) => {
+                    let mut files = Vec::new();
+                    let mut total_additions: i32 = 0;
+                    let mut total_deletions: i32 = 0;
+
+                    for entry in &file_entries {
+                        let filename = entry["filename"].as_str().unwrap_or("").to_string();
+                        let status = entry["status"].as_str().unwrap_or("modified").to_string();
+                        let additions = entry["additions"].as_i64().unwrap_or(0) as i32;
+                        let deletions = entry["deletions"].as_i64().unwrap_or(0) as i32;
+                        let changes = entry["changes"].as_i64().unwrap_or(0) as i32;
+
+                        total_additions += additions;
+                        total_deletions += deletions;
+
+                        files.push(PrFileEntry {
+                            filename,
+                            status,
+                            additions,
+                            deletions,
+                            changes,
+                        });
+                    }
+
+                    let total_files = files.len() as i32;
+
+                    Json(PrFilesResponse {
+                        files,
+                        total_additions,
+                        total_deletions,
+                        total_files,
+                    })
+                    .into_response()
+                }
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": format!("Failed to parse PR files response: {}", e)
+                    })),
+                )
+                    .into_response(),
+            }
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": format!("Failed to fetch PR files: {}", stderr)
+                })),
+            )
+                .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": format!("Failed to run gh command: {}", e)
+            })),
+        )
+            .into_response(),
+    }
+}
+
+/// Get the PR number for a branch using gh pr view.
+async fn get_pr_number(repo_path: &str, branch: &str) -> Option<i32> {
+    let output = Command::new("gh")
+        .args(["pr", "view", branch, "--json", "number"])
+        .current_dir(repo_path)
+        .output()
+        .await
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value = serde_json::from_str(&stdout).ok()?;
+    json["number"].as_i64().map(|n| n as i32)
+}
+
+/// Get the repository name with owner (e.g. "owner/repo") using gh repo view.
+async fn get_repo_nwo(repo_path: &str) -> Option<String> {
+    let output = Command::new("gh")
+        .args(["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"])
+        .current_dir(repo_path)
+        .output()
+        .await
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if stdout.is_empty() {
+        None
+    } else {
+        Some(stdout)
+    }
+}
+
+// ============================================================================
 // Helper Functions
 // ============================================================================
 
@@ -1722,5 +1930,67 @@ mod tests {
         let json = serde_json::to_string(&response).unwrap();
         // skipped should not appear in JSON when empty due to skip_serializing_if
         assert!(!json.contains("skipped"));
+    }
+
+    #[test]
+    fn test_pr_files_response_serialization() {
+        let response = PrFilesResponse {
+            files: vec![
+                PrFileEntry {
+                    filename: "src/app/project/kanban-board.tsx".to_string(),
+                    status: "modified".to_string(),
+                    additions: 16,
+                    deletions: 4,
+                    changes: 20,
+                },
+                PrFileEntry {
+                    filename: "src/components/new-file.tsx".to_string(),
+                    status: "added".to_string(),
+                    additions: 32,
+                    deletions: 0,
+                    changes: 32,
+                },
+            ],
+            total_additions: 48,
+            total_deletions: 4,
+            total_files: 2,
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"total_additions\":48"));
+        assert!(json.contains("\"total_deletions\":4"));
+        assert!(json.contains("\"total_files\":2"));
+        assert!(json.contains("\"status\":\"modified\""));
+        assert!(json.contains("\"status\":\"added\""));
+        assert!(json.contains("\"filename\":\"src/app/project/kanban-board.tsx\""));
+    }
+
+    #[test]
+    fn test_pr_files_response_empty() {
+        let response = PrFilesResponse {
+            files: vec![],
+            total_additions: 0,
+            total_deletions: 0,
+            total_files: 0,
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"files\":[]"));
+        assert!(json.contains("\"total_files\":0"));
+    }
+
+    #[test]
+    fn test_pr_file_entry_all_statuses() {
+        // Verify all GitHub file status values serialize correctly
+        let statuses = vec!["added", "removed", "modified", "renamed", "copied", "changed", "unchanged"];
+        for status in statuses {
+            let entry = PrFileEntry {
+                filename: "test.rs".to_string(),
+                status: status.to_string(),
+                additions: 1,
+                deletions: 1,
+                changes: 2,
+            };
+            let json = serde_json::to_string(&entry).unwrap();
+            assert!(json.contains(&format!("\"status\":\"{}\"", status)));
+        }
     }
 }
