@@ -11,7 +11,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::validate_path_security;
 
@@ -79,7 +79,7 @@ pub struct DeleteMemoryRequest {
 // ---------------------------------------------------------------------------
 
 /// Build the path to the active knowledge file.
-fn knowledge_path(project_path: &PathBuf) -> PathBuf {
+fn knowledge_path(project_path: &Path) -> PathBuf {
     project_path
         .join(".beads")
         .join("memory")
@@ -87,7 +87,7 @@ fn knowledge_path(project_path: &PathBuf) -> PathBuf {
 }
 
 /// Build the path to the archive knowledge file.
-fn archive_path(project_path: &PathBuf) -> PathBuf {
+fn archive_path(project_path: &Path) -> PathBuf {
     project_path
         .join(".beads")
         .join("memory")
