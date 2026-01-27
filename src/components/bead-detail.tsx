@@ -39,6 +39,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DesignDocViewer } from "@/components/design-doc-viewer";
 import { SubtaskList } from "@/components/subtask-list";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -711,20 +717,33 @@ export function BeadDetail({
                 <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
                   <div className="flex items-center justify-between">
                     <p className="text-sm text-zinc-400">No pull request created yet</p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5"
-                      onClick={handleCreatePR}
-                      disabled={isCreatingPR}
-                    >
-                      {isCreatingPR ? (
-                        <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-                      ) : (
-                        <GitPullRequest className="size-3.5" aria-hidden="true" />
-                      )}
-                      Create PR
-                    </Button>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5"
+                              onClick={handleCreatePR}
+                              disabled={isCreatingPR || bead.status !== "inreview"}
+                            >
+                              {isCreatingPR ? (
+                                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                              ) : (
+                                <GitPullRequest className="size-3.5" aria-hidden="true" />
+                              )}
+                              Create PR
+                            </Button>
+                          </span>
+                        </TooltipTrigger>
+                        {bead.status !== "inreview" && (
+                          <TooltipContent>
+                            Bead must be in review to create a PR
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
                 </div>
               )}
