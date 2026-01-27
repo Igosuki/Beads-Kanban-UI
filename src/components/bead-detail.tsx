@@ -45,7 +45,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { usePRStatus } from "@/hooks/use-pr-status";
 import * as api from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 
 export interface BeadDetailProps {
   bead: Bead;
@@ -259,6 +259,9 @@ export function BeadDetail({
   // Merge button delay state - wait for CI checks to load before showing merge button
   const [mergeButtonReady, setMergeButtonReady] = useState(false);
   const [isCheckingCI, setIsCheckingCI] = useState(false);
+
+  // Guard to prevent duplicate auto-cleanup calls when PR is merged
+  const autoCleanupTriggered = useRef(false);
 
   // Fetch PR status when detail panel is open and we have a worktree
   const hasWorktree = worktreeStatus?.exists ?? false;
@@ -483,8 +486,9 @@ export function BeadDetail({
 
   /**
    * Handle cleanup (delete worktree)
+   * @param options.auto - When true, this was triggered automatically on PR merge detection
    */
-  const handleCleanUp = useCallback(async () => {
+  const handleCleanUp = useCallback(async (options?: { auto?: boolean }) => {
     if (!projectPath) return;
 
     setIsCleaningUp(true);
@@ -496,6 +500,12 @@ export function BeadDetail({
       if (!result.success) {
         setActionError("Failed to delete worktree");
       } else {
+        if (options?.auto) {
+          toast({
+            title: "PR merged",
+            description: "Worktree cleaned up and bead closed automatically.",
+          });
+        }
         // Notify parent to refresh data
         onCleanup?.();
       }
@@ -506,6 +516,25 @@ export function BeadDetail({
       setIsCleaningUp(false);
     }
   }, [projectPath, bead.id, onCleanup]);
+
+  // Auto-cleanup when PR merge is detected and worktree still exists
+  useEffect(() => {
+    if (
+      prStatus?.pr?.state === "merged" &&
+      worktreeStatus?.exists &&
+      !autoCleanupTriggered.current &&
+      !isCleaningUp &&
+      projectPath
+    ) {
+      autoCleanupTriggered.current = true;
+      handleCleanUp({ auto: true });
+    }
+  }, [prStatus, worktreeStatus, isCleaningUp, projectPath, handleCleanUp]);
+
+  // Reset auto-cleanup guard when the bead changes
+  useEffect(() => {
+    autoCleanupTriggered.current = false;
+  }, [bead.id]);
 
   /**
    * Open worktree in external application
@@ -820,7 +849,7 @@ export function BeadDetail({
                         variant="outline"
                         size="sm"
                         className="gap-1.5 border-zinc-600/30 text-zinc-400 hover:bg-zinc-500/10"
-                        onClick={handleCleanUp}
+                        onClick={() => handleCleanUp()}
                         disabled={isCleaningUp}
                       >
                         {isCleaningUp ? (
