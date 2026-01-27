@@ -9,7 +9,7 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import type { Bead, WorktreeStatus, PRStatus } from "@/types";
+import type { Bead, WorktreeStatus, PRStatus, StatusBadgeInfo } from "@/types";
 import type { BranchStatus } from "@/lib/git";
 import { FolderOpen, GitPullRequest, Link2, MessageSquare, Check, X, Clock } from "lucide-react";
 
@@ -188,6 +188,21 @@ function getTypeLabel(bead: Bead): string {
   return bead.issue_type === "epic" ? "Epic" : "Task";
 }
 
+/**
+ * Get badge variant class for status badges based on severity.
+ * warning = orange (blocked, unknown), muted = gray (deferred), info = blue (hooked/waiting)
+ */
+function getStatusBadgeClasses(variant: StatusBadgeInfo['variant']): string {
+  switch (variant) {
+    case 'warning':
+      return 'bg-orange-500/15 text-orange-400 border-orange-600/30';
+    case 'muted':
+      return 'bg-zinc-500/15 text-zinc-400 border-zinc-600/30';
+    case 'info':
+      return 'bg-blue-500/15 text-blue-400 border-blue-600/30';
+  }
+}
+
 export function BeadCard({ bead, ticketNumber, branchStatus, worktreeStatus, prStatus, isSelected = false, onSelect }: BeadCardProps) {
   const blocked = isBlocked(bead);
   const commentCount = (bead.comments ?? []).length;
@@ -248,6 +263,15 @@ export function BeadCard({ bead, ticketNumber, branchStatus, worktreeStatus, prS
                 size="xs"
               >
                 BLOCKED
+              </Badge>
+            )}
+            {bead._statusBadge && !(blocked && bead._originalStatus === 'blocked') && (
+              <Badge
+                variant="outline"
+                size="xs"
+                className={getStatusBadgeClasses(bead._statusBadge.variant)}
+              >
+                {bead._statusBadge.label}
               </Badge>
             )}
             <Badge

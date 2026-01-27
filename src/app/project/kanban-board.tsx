@@ -25,6 +25,7 @@ import { useBeads } from "@/hooks/use-beads";
 import { useProject } from "@/hooks/use-project";
 import { useBeadFilters } from "@/hooks/use-bead-filters";
 import { useGitHubStatus } from "@/hooks/use-github-status";
+import { getUnknownStatusBeads, getUnknownStatusNames } from "@/lib/beads-parser";
 /**
  * @deprecated useBranchStatuses is deprecated. Use useWorktreeStatuses instead.
  * TODO: Migrate to useWorktreeStatuses for the worktree-based workflow.
@@ -158,7 +159,8 @@ export default function KanbanBoard() {
   }, [filteredBeads, typeFilter]);
 
   /**
-   * Group top-level beads by status for columns
+   * Group top-level beads by status for columns.
+   * Defensive: falls back to 'open' for any status not in the 4 columns.
    */
   const filteredBeadsByStatus = useMemo(() => {
     const grouped: Record<BeadStatus, Bead[]> = {
@@ -167,11 +169,18 @@ export default function KanbanBoard() {
       inreview: [],
       closed: [],
     };
-    topLevelBeads.forEach((bead) => {
-      grouped[bead.status].push(bead);
-    });
+    for (const bead of topLevelBeads) {
+      const column = grouped[bead.status] ? bead.status : 'open';
+      grouped[column].push(bead);
+    }
     return grouped;
   }, [topLevelBeads]);
+
+  /**
+   * Detect beads with truly unknown statuses for the warning indicator.
+   */
+  const unknownStatusBeads = useMemo(() => getUnknownStatusBeads(beads), [beads]);
+  const unknownStatusNames = useMemo(() => getUnknownStatusNames(beads), [beads]);
 
   // Detail sheet state
   const [detailBeadId, setDetailBeadId] = useState<string | null>(null);
@@ -338,6 +347,9 @@ export default function KanbanBoard() {
           // Memory
           isMemoryOpen={isMemoryOpen}
           onMemoryToggle={() => setIsMemoryOpen((prev) => !prev)}
+          // Unknown status warning
+          unknownStatusCount={unknownStatusBeads.length}
+          unknownStatusNames={unknownStatusNames}
         />
       </div>
 

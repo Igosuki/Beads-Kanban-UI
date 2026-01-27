@@ -31,9 +31,55 @@ export interface Tag {
 }
 
 /**
- * Bead status types
+ * Bead status types (the 4 kanban columns)
  */
 export type BeadStatus = 'open' | 'in_progress' | 'inreview' | 'closed';
+
+/**
+ * All known statuses from the Beads CLI (bd v0.47.0+).
+ * The backend can send any of these; they get mapped to BeadStatus columns.
+ */
+export type KnownRawStatus =
+  | BeadStatus
+  | 'blocked'
+  | 'deferred'
+  | 'tombstone'
+  | 'hooked'
+  | 'done'
+  | 'resolved'
+  | 'pending';
+
+/**
+ * Badge info for beads whose original status differs from their mapped column.
+ */
+export interface StatusBadgeInfo {
+  /** Label shown on the badge */
+  label: string;
+  /** Tailwind color classes for the badge */
+  variant: 'warning' | 'muted' | 'info';
+}
+
+/**
+ * Mapping from known raw statuses to their column + optional badge.
+ * tombstone maps to null (hidden).
+ */
+export const STATUS_MAP: Record<KnownRawStatus, { column: BeadStatus; badge?: StatusBadgeInfo } | null> = {
+  // Native column statuses (no badge needed)
+  open:        { column: 'open' },
+  in_progress: { column: 'in_progress' },
+  inreview:    { column: 'inreview' },
+  closed:      { column: 'closed' },
+  // Synonyms
+  done:        { column: 'closed' },
+  resolved:    { column: 'closed' },
+  pending:     { column: 'open' },
+  // Mapped with badges
+  blocked:     { column: 'open',        badge: { label: 'Blocked',  variant: 'warning' } },
+  deferred:    { column: 'open',        badge: { label: 'Deferred', variant: 'muted'   } },
+  hooked:      { column: 'in_progress', badge: { label: 'Waiting',  variant: 'info'    } },
+  // Hidden
+  tombstone:   null,
+};
 
 /**
  * Bead from .beads/issues.jsonl
@@ -56,6 +102,9 @@ export interface Bead {
   deps?: string[];            // Dependency IDs (blocking this task)
   blockers?: string[];        // COMPUTED: Tasks this blocks (derived from deps relationships)
   relates_to?: string[];      // Bead IDs with relates-to links (bidirectional "see also")
+  // Status mapping fields (set by beads-parser when raw status differs from column)
+  _originalStatus?: string;   // The raw status from the backend before mapping
+  _statusBadge?: StatusBadgeInfo; // Badge info if the bead was mapped to a different column
 }
 
 /**

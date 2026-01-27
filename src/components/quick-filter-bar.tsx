@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Search, X, ArrowUpDown, SlidersHorizontal, BrainCircuit } from 'lucide-react';
+import { Search, X, ArrowUpDown, SlidersHorizontal, BrainCircuit, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -14,6 +14,12 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { BeadStatus } from '@/types';
 
@@ -60,6 +66,10 @@ interface QuickFilterBarProps {
   isMemoryOpen?: boolean;
   /** Callback to toggle memory panel */
   onMemoryToggle?: () => void;
+  /** Count of beads with truly unknown statuses */
+  unknownStatusCount?: number;
+  /** List of unknown status names for tooltip */
+  unknownStatusNames?: string[];
 }
 
 const TYPE_OPTIONS: { value: TypeFilter; label: string }[] = [
@@ -106,6 +116,8 @@ export function QuickFilterBar({
   hasActiveFilters,
   isMemoryOpen,
   onMemoryToggle,
+  unknownStatusCount = 0,
+  unknownStatusNames = [],
 }: QuickFilterBarProps) {
   const currentSortValue = `${sortField}_${sortDirection}`;
 
@@ -196,6 +208,36 @@ export function QuickFilterBar({
           <BrainCircuit className="size-4" aria-hidden="true" />
           Memory
         </button>
+      )}
+
+      {/* Unknown status warning indicator */}
+      {unknownStatusCount > 0 && (
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                role="status"
+                className="flex items-center gap-1.5 h-8 px-2.5 text-sm font-medium rounded-md bg-orange-500/15 text-orange-400 border border-orange-600/30"
+              >
+                <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
+                <span className="tabular-nums">{unknownStatusCount}</span>
+                <span className="sr-only">
+                  {unknownStatusCount === 1 ? 'bead has an' : 'beads have'} unknown {unknownStatusCount === 1 ? 'status' : 'statuses'}
+                </span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-xs">
+              <p className="font-medium">
+                {unknownStatusCount} {unknownStatusCount === 1 ? 'bead has an' : 'beads have'} unknown {unknownStatusCount === 1 ? 'status' : 'statuses'}
+              </p>
+              <p className="text-primary-foreground/70 mt-1">
+                {unknownStatusNames.length > 0
+                  ? `Unknown: ${unknownStatusNames.join(', ')}`
+                  : 'Mapped to Open column'}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )}
 
       {/* Spacer to push sort and filter to the right */}
