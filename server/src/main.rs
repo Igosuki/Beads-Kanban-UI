@@ -10,7 +10,7 @@ use axum::{
     body::Body,
     http::{header, Request, Response, StatusCode},
     response::IntoResponse,
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
     Router,
 };
 use rust_embed::Embed;
@@ -129,6 +129,9 @@ async fn main() {
         .route("/api/git/create-pr", post(routes::worktree::create_pr))
         .route("/api/git/merge-pr", post(routes::worktree::merge_pr))
         .route("/api/git/rebase-siblings", post(routes::worktree::rebase_siblings))
+        // Agent endpoints
+        .route("/api/agents", get(routes::agents::list_agents))
+        .route("/api/agents/:filename", put(routes::agents::update_agent))
         // Memory endpoints
         .route(
             "/api/memory",

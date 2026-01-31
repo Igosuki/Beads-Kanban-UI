@@ -3,6 +3,7 @@
 //! This module contains all HTTP route handlers.
 //! Additional handlers will be added as API endpoints are implemented.
 
+pub mod agents;
 pub mod beads;
 pub mod cli;
 pub mod fs;
