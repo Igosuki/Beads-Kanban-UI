@@ -120,6 +120,14 @@ export function useBeadFilters(
   // Filter state
   const [filters, setFiltersState] = useState<BeadFilters>(DEFAULT_FILTERS);
 
+  // "today" string computed client-side only to avoid SSR/client hydration mismatch.
+  // Starts as null (same on server and client), set after mount.
+  const [todayStr, setTodayStr] = useState<string | null>(null);
+
+  useEffect(() => {
+    setTodayStr(new Date().toISOString().split("T")[0]);
+  }, []);
+
   // Debounced search value
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
@@ -196,10 +204,11 @@ export function useBeadFilters(
         if (!filters.owners.includes(bead.owner)) return false;
       }
 
-      // Today filter - items updated (worked on) today, regardless of status
-      if (filters.todayOnly) {
-        const today = new Date().toISOString().split("T")[0];
-        const updatedToday = bead.updated_at.startsWith(today);
+      // Today filter - items updated (worked on) today, regardless of status.
+      // Uses client-computed todayStr to avoid SSR/client hydration mismatch.
+      // Before mount (todayStr is null), skip filtering to match SSR output.
+      if (filters.todayOnly && todayStr) {
+        const updatedToday = bead.updated_at.startsWith(todayStr);
         if (!updatedToday) return false;
       }
 
@@ -220,7 +229,7 @@ export function useBeadFilters(
     });
 
     return sorted;
-  }, [beads, debouncedSearch, filters, ticketNumbers]);
+  }, [beads, debouncedSearch, filters, ticketNumbers, todayStr]);
 
   /**
    * Check if any filters are active

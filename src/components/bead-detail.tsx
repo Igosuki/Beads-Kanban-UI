@@ -135,7 +135,7 @@ function formatDate(dateString: string): string {
     const datePart = date.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
-      year: date.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
+      year: "numeric",
     });
     const timePart = date.toLocaleTimeString("en-US", {
       hour: "2-digit",
@@ -157,7 +157,7 @@ function formatShortDate(dateString: string): string {
     return date.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
-      year: date.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
+      year: "numeric",
     });
   } catch {
     return dateString;

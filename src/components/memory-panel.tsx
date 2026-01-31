@@ -139,6 +139,7 @@ function MemoryEntryCard({
         <time
           dateTime={new Date(entry.ts * 1000).toISOString()}
           className="text-xs text-zinc-600 shrink-0 tabular-nums"
+          suppressHydrationWarning
         >
           {formatRelativeTime(entry.ts)}
         </time>
