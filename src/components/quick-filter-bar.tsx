@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 
-import { Search, X, ArrowUpDown, SlidersHorizontal, BrainCircuit, AlertTriangle } from 'lucide-react';
+import { Search, X, ArrowUpDown, SlidersHorizontal, BrainCircuit, Bot, AlertTriangle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -68,6 +68,10 @@ interface QuickFilterBarProps {
   isMemoryOpen?: boolean;
   /** Callback to toggle memory panel */
   onMemoryToggle?: () => void;
+  /** Whether the agents panel is open */
+  isAgentsOpen?: boolean;
+  /** Callback to toggle agents panel */
+  onAgentsToggle?: () => void;
   /** Count of beads with truly unknown statuses */
   unknownStatusCount?: number;
   /** List of unknown status names for tooltip */
@@ -118,6 +122,8 @@ export function QuickFilterBar({
   hasActiveFilters,
   isMemoryOpen,
   onMemoryToggle,
+  isAgentsOpen,
+  onAgentsToggle,
   unknownStatusCount = 0,
   unknownStatusNames = [],
 }: QuickFilterBarProps) {
@@ -209,6 +215,24 @@ export function QuickFilterBar({
         >
           <BrainCircuit className="size-4" aria-hidden="true" />
           Memory
+        </button>
+      )}
+
+      {/* Agents Toggle */}
+      {onAgentsToggle && (
+        <button
+          type="button"
+          onClick={onAgentsToggle}
+          aria-pressed={isAgentsOpen}
+          className={cn(
+            'h-8 px-3 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900',
+            isAgentsOpen
+              ? 'bg-orange-500/20 text-orange-400'
+              : 'bg-zinc-800/50 text-zinc-400 hover:text-zinc-200'
+          )}
+        >
+          <Bot className="size-4" aria-hidden="true" />
+          Agents
         </button>
       )}
 

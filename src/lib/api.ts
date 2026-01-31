@@ -3,7 +3,7 @@
  * Replaces Tauri invoke() calls with HTTP fetch to backend
  */
 
-import type { Project, Tag, Bead, WorktreeStatus, WorktreeEntry, PRStatus, PRFilesResponse, MemoryResponse, MemoryStats, MemoryEntry } from '@/types';
+import type { Project, Tag, Bead, WorktreeStatus, WorktreeEntry, PRStatus, PRFilesResponse, MemoryResponse, MemoryStats, MemoryEntry, Agent, AgentModel } from '@/types';
 
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3008';
 
@@ -328,6 +328,22 @@ export const memory = {
     fetchApi<{ success: boolean; archived: boolean }>('/api/memory', {
       method: 'DELETE',
       body: JSON.stringify({ path, key, archive }),
+    }),
+};
+
+/**
+ * Agents API
+ */
+export const agents = {
+  /** List all agents for a project */
+  list: (path: string) =>
+    fetchApi<Agent[]>(`/api/agents?path=${encodeURIComponent(path)}`),
+
+  /** Update an agent's model or tools configuration */
+  update: (filename: string, path: string, data: { model: AgentModel; all_tools: boolean }) =>
+    fetchApi<Agent>(`/api/agents/${encodeURIComponent(filename)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ path, ...data }),
     }),
 };
 

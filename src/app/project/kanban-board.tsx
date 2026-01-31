@@ -8,6 +8,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
 import { ActivityTimeline } from "@/components/activity-timeline";
+import { AgentsPanel } from "@/components/agents-panel";
 import { BeadDetail } from "@/components/bead-detail";
 import { CommentList } from "@/components/comment-list";
 import { EditableProjectName } from "@/components/editable-project-name";
@@ -102,6 +103,9 @@ export default function KanbanBoard() {
 
   // Memory panel state
   const [isMemoryOpen, setIsMemoryOpen] = useState(false);
+
+  // Agents panel state
+  const [isAgentsOpen, setIsAgentsOpen] = useState(false);
 
   // Show GitHub warning if project loaded, status checked, and either no remote or not authenticated
   const showGitHubWarning = !projectLoading &&
@@ -350,6 +354,9 @@ export default function KanbanBoard() {
           // Memory
           isMemoryOpen={isMemoryOpen}
           onMemoryToggle={() => setIsMemoryOpen((prev) => !prev)}
+          // Agents
+          isAgentsOpen={isAgentsOpen}
+          onAgentsToggle={() => setIsAgentsOpen((prev) => !prev)}
           // Unknown status warning
           unknownStatusCount={unknownStatusBeads.length}
           unknownStatusNames={unknownStatusNames}
@@ -430,6 +437,15 @@ export default function KanbanBoard() {
           onOpenChange={setIsMemoryOpen}
           projectPath={project.path}
           onNavigateToBead={handleMemoryNavigateToBead}
+        />
+      )}
+
+      {/* Agents Panel */}
+      {project?.path && (
+        <AgentsPanel
+          open={isAgentsOpen}
+          onOpenChange={setIsAgentsOpen}
+          projectPath={project.path}
         />
       )}
 

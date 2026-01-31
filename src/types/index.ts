@@ -329,3 +329,30 @@ export interface MemoryResponse {
   entries: MemoryEntry[];
   stats: MemoryStats;
 }
+
+// ============================================================================
+// Agent Types
+// ============================================================================
+
+/**
+ * Supported model names for Claude agents
+ */
+export type AgentModel = "opus" | "sonnet" | "haiku";
+
+/**
+ * An agent definition from .claude/agents/*.md
+ */
+export interface Agent {
+  /** Filename of the agent markdown file (e.g. "reviewer.md") */
+  filename: string;
+  /** Display name of the agent */
+  name: string;
+  /** Model the agent uses */
+  model: AgentModel;
+  /** Description of the agent's role */
+  description: string;
+  /** List of allowed tools, or "*" for all tools */
+  tools: string[] | "*";
+  /** Optional nickname for the agent */
+  nickname: string | null;
+}
