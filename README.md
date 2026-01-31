@@ -17,6 +17,9 @@
 **Bead Details** — Dive into epics with full context and subtasks:
 ![Bead detail panel showing epic with progress bar and subtasks](Screenshots/bead-detail.png)
 
+**Agents Panel** — View and configure agent definitions with model and tool controls:
+![Agents panel showing agent cards with model selector and tools](Screenshots/agents.png)
+
 ## Key Features
 
 - 📋 **Multi-project dashboard** — Manage all your beads projects in one place with status donut charts
@@ -25,6 +28,7 @@
 - 🏗️ **Epic support** — Group related tasks with visual progress bars, view all subtasks, close epic when complete
 - 🔗 **Related tasks** — Bidirectional "see also" links between beads via `bd dep relate`, visible on cards, subtask rows, and detail panels
 - 🧠 **Memory panel** — Browse, search, edit, and archive your project's knowledge base (`.beads/memory/knowledge.jsonl`) from a slide-out panel
+- 🤖 **Agents panel** — View and configure your `.claude/agents/*.md` agent definitions — switch models and toggle tool access from the UI
 - 🎨 **Type-based visuals** — Bugs, features, and epics display with distinct accent colors for quick recognition
 - 🔄 **Real-time sync** — File watcher auto-updates when beads files change on disk; PR status refreshes every 30s
 - 🔍 **Search & filter** — Unified floating toolbar with search, type filters (epics/tasks), today mode, status, and owner filters
@@ -113,6 +117,12 @@ The app watches for file changes and syncs in real-time.
 - Search and filter entries by type (Learned / Investigation)
 - Edit content and tags inline, archive or delete entries
 - Click any entry to navigate directly to its linked bead
+
+**Agents Panel**
+- View all your project's agent definitions (`.claude/agents/*.md`) from the toolbar (🤖 button)
+- Each agent card shows name, model badge (haiku/sonnet/opus), description, and available tools
+- Expand any card to switch the agent's model or toggle all-tools access
+- Changes write directly to the agent's `.md` file, updating the YAML frontmatter
 
 **Related Tasks**
 - Create bidirectional "see also" links between beads with `bd dep relate`
