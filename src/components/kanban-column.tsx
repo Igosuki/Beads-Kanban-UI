@@ -6,12 +6,8 @@ import { BeadCard } from "@/components/bead-card";
 import { EpicCard } from "@/components/epic-card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { BranchStatus } from "@/lib/git";
 import { cn } from "@/lib/utils";
 import type { Bead, BeadStatus, Epic } from "@/types";
-/**
- * @deprecated BranchStatus is deprecated. Use WorktreeStatus from "@/types" instead.
- */
 
 export interface KanbanColumnProps {
   status: BeadStatus;
@@ -21,11 +17,6 @@ export interface KanbanColumnProps {
   allBeads: Bead[];
   selectedBeadId?: string | null;
   ticketNumbers?: Map<string, number>;
-  /**
-   * @deprecated Use worktree statuses instead. Branch-based workflow is deprecated.
-   * This prop will be removed in a future version.
-   */
-  branchStatuses?: Record<string, BranchStatus>;
   onSelectBead: (bead: Bead) => void;
   onChildClick?: (child: Bead) => void;
   onNavigateToDependency?: (beadId: string) => void;
@@ -107,7 +98,6 @@ export function KanbanColumn({
   allBeads,
   selectedBeadId,
   ticketNumbers,
-  branchStatuses = {},
   onSelectBead,
   onChildClick,
   onNavigateToDependency,
@@ -163,7 +153,6 @@ export function KanbanColumn({
                 bead={bead}
                 ticketNumber={ticketNumbers?.get(bead.id)}
                 isSelected={selectedBeadId === bead.id}
-                branchStatus={branchStatuses[bead.id]}
                 onSelect={onSelectBead}
               />
             );

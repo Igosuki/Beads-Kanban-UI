@@ -27,11 +27,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { useBeadFilters } from "@/hooks/use-bead-filters";
 import { useBeads } from "@/hooks/use-beads";
-/**
- * @deprecated useBranchStatuses is deprecated. Use useWorktreeStatuses instead.
- * TODO: Migrate to useWorktreeStatuses for the worktree-based workflow.
- */
-import { useBranchStatuses } from "@/hooks/use-branch-statuses";
 import { useGitHubStatus } from "@/hooks/use-github-status";
 import { useKeyboardNavigation } from "@/hooks/use-keyboard-navigation";
 import { useProject } from "@/hooks/use-project";
@@ -134,14 +129,8 @@ export default function KanbanBoard() {
     setFilters({ owners: newOwners });
   }, [filters.owners, setFilters]);
 
-  // @deprecated: Branch statuses are deprecated. TODO: migrate to useWorktreeStatuses
-  // Fetch branch statuses for all beads (legacy - for backward compatibility)
   // Filter out closed beads to avoid unnecessary polling for finalized tasks
   const beadIds = useMemo(() => beads.filter(b => b.status !== 'closed').map(b => b.id), [beads]);
-  const { statuses: branchStatuses } = useBranchStatuses(
-    project?.path ?? "",
-    beadIds
-  );
 
   // Worktree statuses for PR workflow
   const { statuses: worktreeStatuses } = useWorktreeStatuses(
@@ -384,7 +373,6 @@ export default function KanbanBoard() {
                 allBeads={beads}
                 selectedBeadId={selectedId}
                 ticketNumbers={ticketNumbers}
-                branchStatuses={branchStatuses}
                 onSelectBead={handleSelectBead}
                 onChildClick={handleChildClick}
                 onNavigateToDependency={handleNavigateToDependency}
@@ -401,7 +389,6 @@ export default function KanbanBoard() {
         <BeadDetail
           bead={detailBead}
           ticketNumber={ticketNumbers.get(detailBead.id)}
-          branchStatus={branchStatuses[detailBead.id]}
           worktreeStatus={worktreeStatuses[detailBead.id]}
           open={isDetailOpen}
           onOpenChange={(open) => {

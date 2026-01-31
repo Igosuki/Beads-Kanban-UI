@@ -10,15 +10,12 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import type { BranchStatus } from "@/lib/git";
 import { cn } from "@/lib/utils";
 import type { Bead, WorktreeStatus, PRStatus, StatusBadgeInfo } from "@/types";
 
 export interface BeadCardProps {
   bead: Bead;
   ticketNumber?: number;
-  /** @deprecated Use worktreeStatus instead */
-  branchStatus?: BranchStatus;
   /** Worktree status for the bead */
   worktreeStatus?: WorktreeStatus;
   /** Mini PR status for card display */
@@ -204,18 +201,13 @@ function getStatusBadgeClasses(variant: StatusBadgeInfo['variant']): string {
   }
 }
 
-export function BeadCard({ bead, ticketNumber, branchStatus, worktreeStatus, prStatus, isSelected = false, onSelect }: BeadCardProps) {
+export function BeadCard({ bead, ticketNumber, worktreeStatus, prStatus, isSelected = false, onSelect }: BeadCardProps) {
   const blocked = isBlocked(bead);
   const commentCount = (bead.comments ?? []).length;
   const relatedCount = (bead.relates_to ?? []).length;
 
-  // Prefer worktree status over branch status
   const hasWorktree = worktreeStatus?.exists ?? false;
   const hasPR = prStatus?.pr !== null && prStatus?.pr !== undefined;
-
-  // Fallback to legacy branch status if no worktree status provided
-  const branchExists = branchStatus?.exists ?? false;
-  const showLegacyBranch = !worktreeStatus && branchExists;
 
   // Get PR checks display info
   const prChecksDisplay = prStatus ? getPRChecksDisplay(prStatus) : null;
@@ -331,20 +323,6 @@ export function BeadCard({ bead, ticketNumber, branchStatus, worktreeStatus, prS
         </div>
       )}
 
-      {/* Legacy branch badge (fallback when no worktree status) */}
-      {showLegacyBranch && branchStatus && (
-        <div className="px-3 pb-3">
-          <Badge
-            variant="outline"
-            size="sm"
-            className={getLegacyBranchBadgeColor(branchStatus)}
-          >
-            <FolderOpen className="size-3 mr-1" aria-hidden="true" />
-            {getLegacyBranchStatusLabel(branchStatus)}
-          </Badge>
-        </div>
-      )}
-
       {/* Footer: comment count + related count */}
       {(commentCount > 0 || relatedCount > 0) && (
         <CardFooter className="p-3 pt-0 gap-2 text-muted-foreground">
@@ -364,39 +342,4 @@ export function BeadCard({ bead, ticketNumber, branchStatus, worktreeStatus, prS
       )}
     </Card>
   );
-}
-
-/**
- * Legacy: Get branch badge color based on ahead/behind status
- * @deprecated Used only for backward compatibility when worktreeStatus is not provided
- */
-function getLegacyBranchBadgeColor(status: BranchStatus): string {
-  const { ahead, behind } = status;
-
-  if (ahead > 0 && behind > 0) {
-    return "bg-red-500/10 text-red-400 border-red-600/30";
-  } else if (ahead > 0 && behind === 0) {
-    return "bg-green-500/10 text-green-400 border-green-600/30";
-  } else if (ahead === 0 && behind > 0) {
-    return "bg-zinc-500/10 text-zinc-400 border-zinc-600/30";
-  } else {
-    return "bg-green-500/10 text-green-400 border-green-600/30";
-  }
-}
-
-/**
- * Legacy: Get human-readable label for branch status
- * @deprecated Used only for backward compatibility when worktreeStatus is not provided
- */
-function getLegacyBranchStatusLabel(status: BranchStatus): string {
-  const { ahead, behind } = status;
-
-  if (ahead > 0 && behind > 0) {
-    return "Needs rebase";
-  } else if (ahead > 0 && behind === 0) {
-    return "Ready to merge";
-  } else if (ahead === 0 && behind > 0) {
-    return "Behind";
-  }
-  return "Synced";
 }

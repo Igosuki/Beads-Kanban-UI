@@ -53,7 +53,6 @@ import {
 import { usePRStatus } from "@/hooks/use-pr-status";
 import { toast } from "@/hooks/use-toast";
 import * as api from "@/lib/api";
-import type { BranchStatus } from "@/lib/git";
 import { cn } from "@/lib/utils";
 import type { Bead, BeadStatus, WorktreeStatus, PRStatus, PRChecks, PRFilesResponse } from "@/types";
 
@@ -61,8 +60,6 @@ import type { Bead, BeadStatus, WorktreeStatus, PRStatus, PRChecks, PRFilesRespo
 export interface BeadDetailProps {
   bead: Bead;
   ticketNumber?: number;
-  /** @deprecated Use worktreeStatus instead */
-  branchStatus?: BranchStatus;
   /** Worktree status for the bead */
   worktreeStatus?: WorktreeStatus;
   open: boolean;
@@ -246,7 +243,6 @@ function getChecksStatusDisplay(checks: PRChecks): {
 export function BeadDetail({
   bead,
   ticketNumber,
-  branchStatus,
   worktreeStatus,
   open,
   onOpenChange,
