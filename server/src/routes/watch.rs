@@ -18,7 +18,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, info, warn};
 
-use super::beads::recompute_epic_statuses;
+use super::beads::{recompute_epic_statuses, resolve_issues_path};
 
 /// Query parameters for the watch endpoint.
 #[derive(Debug, Deserialize)]
@@ -53,7 +53,7 @@ pub async fn watch_beads(
     Query(params): Query<WatchParams>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let project_path = PathBuf::from(&params.path);
-    let beads_file = project_path.join(".beads").join("issues.jsonl");
+    let beads_file = resolve_issues_path(&project_path);
 
     info!("Starting file watcher for: {:?}", beads_file);
 

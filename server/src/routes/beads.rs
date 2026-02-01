@@ -16,6 +16,50 @@ use std::path::{Path, PathBuf};
 
 use super::validate_path_security;
 
+/// Resolves the correct path to `issues.jsonl` for a project.
+///
+/// When a project has `sync-branch` set in `.beads/config.yaml`, the canonical
+/// JSONL file lives at `.git/beads-worktrees/<branch>/.beads/issues.jsonl`
+/// instead of the default `.beads/issues.jsonl`.
+///
+/// # Fallback behavior
+///
+/// Returns the default `.beads/issues.jsonl` path when:
+/// - No `.beads/config.yaml` exists
+/// - The YAML is malformed or cannot be parsed
+/// - `sync-branch` is not set, empty, or commented out
+/// - The resolved worktree directory does not exist
+pub fn resolve_issues_path(project_path: &Path) -> PathBuf {
+    let config_path = project_path.join(".beads").join("config.yaml");
+    let default_path = project_path.join(".beads").join("issues.jsonl");
+
+    let config_contents = match std::fs::read_to_string(&config_path) {
+        Ok(c) => c,
+        Err(_) => return default_path,
+    };
+
+    let yaml: serde_yaml::Value = match serde_yaml::from_str(&config_contents) {
+        Ok(v) => v,
+        Err(_) => return default_path,
+    };
+
+    let branch = match yaml.get("sync-branch").and_then(|v| v.as_str()) {
+        Some(b) if !b.trim().is_empty() => b.trim().to_string(),
+        _ => return default_path,
+    };
+
+    let worktree_dir = project_path
+        .join(".git")
+        .join("beads-worktrees")
+        .join(&branch);
+
+    if !worktree_dir.exists() {
+        return default_path;
+    }
+
+    worktree_dir.join(".beads").join("issues.jsonl")
+}
+
 /// Query parameters for the beads endpoint.
 #[derive(Debug, Deserialize)]
 pub struct BeadsParams {
@@ -96,7 +140,7 @@ pub async fn read_beads(Query(params): Query<BeadsParams>) -> impl IntoResponse 
         );
     }
 
-    let issues_path = project_path.join(".beads").join("issues.jsonl");
+    let issues_path = resolve_issues_path(&project_path);
 
     // Check if the file exists
     if !issues_path.exists() {
@@ -264,7 +308,7 @@ pub async fn add_comment(Json(payload): Json<AddCommentRequest>) -> impl IntoRes
         );
     }
 
-    let issues_path = project_path.join(".beads").join("issues.jsonl");
+    let issues_path = resolve_issues_path(&project_path);
 
     // Check if the file exists
     if !issues_path.exists() {
@@ -913,5 +957,228 @@ mod tests {
         // dependencies should NOT be serialized (skip_serializing)
         assert!(!json.contains("dependencies"));
         assert!(!json.contains("depends_on_id"));
+    }
+
+    // ── resolve_issues_path tests ──────────────────────────────────────
+
+    #[test]
+    fn test_resolve_no_config_file() {
+        // When .beads/config.yaml does not exist, fall back to default
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path();
+        std::fs::create_dir_all(project.join(".beads")).unwrap();
+
+        let result = resolve_issues_path(project);
+        assert_eq!(result, project.join(".beads").join("issues.jsonl"));
+    }
+
+    #[test]
+    fn test_resolve_empty_config_file() {
+        // Empty config file -> default path
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path();
+        let beads_dir = project.join(".beads");
+        std::fs::create_dir_all(&beads_dir).unwrap();
+        std::fs::write(beads_dir.join("config.yaml"), "").unwrap();
+
+        let result = resolve_issues_path(project);
+        assert_eq!(result, project.join(".beads").join("issues.jsonl"));
+    }
+
+    #[test]
+    fn test_resolve_commented_out_sync_branch() {
+        // sync-branch is commented out -> default path
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path();
+        let beads_dir = project.join(".beads");
+        std::fs::create_dir_all(&beads_dir).unwrap();
+        std::fs::write(
+            beads_dir.join("config.yaml"),
+            "# sync-branch: \"beads-sync\"\n",
+        )
+        .unwrap();
+
+        let result = resolve_issues_path(project);
+        assert_eq!(result, project.join(".beads").join("issues.jsonl"));
+    }
+
+    #[test]
+    fn test_resolve_valid_sync_branch() {
+        // Valid sync-branch with existing worktree dir -> sync path
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path();
+
+        let beads_dir = project.join(".beads");
+        std::fs::create_dir_all(&beads_dir).unwrap();
+        std::fs::write(
+            beads_dir.join("config.yaml"),
+            "sync-branch: \"beads-sync\"\n",
+        )
+        .unwrap();
+
+        // Create the worktree directory
+        let worktree_beads = project
+            .join(".git")
+            .join("beads-worktrees")
+            .join("beads-sync")
+            .join(".beads");
+        std::fs::create_dir_all(&worktree_beads).unwrap();
+
+        let result = resolve_issues_path(project);
+        assert_eq!(result, worktree_beads.join("issues.jsonl"));
+    }
+
+    #[test]
+    fn test_resolve_malformed_yaml() {
+        // Malformed YAML -> default path
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path();
+        let beads_dir = project.join(".beads");
+        std::fs::create_dir_all(&beads_dir).unwrap();
+        std::fs::write(
+            beads_dir.join("config.yaml"),
+            "sync-branch: [invalid: yaml: {{\n",
+        )
+        .unwrap();
+
+        let result = resolve_issues_path(project);
+        assert_eq!(result, project.join(".beads").join("issues.jsonl"));
+    }
+
+    #[test]
+    fn test_resolve_worktree_dir_missing() {
+        // sync-branch set but worktree directory does not exist -> default
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path();
+        let beads_dir = project.join(".beads");
+        std::fs::create_dir_all(&beads_dir).unwrap();
+        std::fs::write(
+            beads_dir.join("config.yaml"),
+            "sync-branch: \"nonexistent-branch\"\n",
+        )
+        .unwrap();
+        // Do NOT create .git/beads-worktrees/nonexistent-branch
+
+        let result = resolve_issues_path(project);
+        assert_eq!(result, project.join(".beads").join("issues.jsonl"));
+    }
+
+    #[test]
+    fn test_resolve_spaces_in_branch_name() {
+        // Branch name with spaces (unusual but valid YAML string)
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path();
+        let beads_dir = project.join(".beads");
+        std::fs::create_dir_all(&beads_dir).unwrap();
+        std::fs::write(
+            beads_dir.join("config.yaml"),
+            "sync-branch: \"my branch\"\n",
+        )
+        .unwrap();
+
+        let worktree_dir = project
+            .join(".git")
+            .join("beads-worktrees")
+            .join("my branch");
+        std::fs::create_dir_all(&worktree_dir).unwrap();
+
+        let result = resolve_issues_path(project);
+        assert_eq!(
+            result,
+            worktree_dir.join(".beads").join("issues.jsonl")
+        );
+    }
+
+    #[test]
+    fn test_resolve_empty_string_sync_branch() {
+        // sync-branch set to empty string -> default path
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path();
+        let beads_dir = project.join(".beads");
+        std::fs::create_dir_all(&beads_dir).unwrap();
+        std::fs::write(
+            beads_dir.join("config.yaml"),
+            "sync-branch: \"\"\n",
+        )
+        .unwrap();
+
+        let result = resolve_issues_path(project);
+        assert_eq!(result, project.join(".beads").join("issues.jsonl"));
+    }
+
+    #[test]
+    fn test_resolve_sync_branch_without_quotes() {
+        // YAML allows unquoted strings
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path();
+        let beads_dir = project.join(".beads");
+        std::fs::create_dir_all(&beads_dir).unwrap();
+        std::fs::write(
+            beads_dir.join("config.yaml"),
+            "sync-branch: beads-sync\n",
+        )
+        .unwrap();
+
+        let worktree_beads = project
+            .join(".git")
+            .join("beads-worktrees")
+            .join("beads-sync")
+            .join(".beads");
+        std::fs::create_dir_all(&worktree_beads).unwrap();
+
+        let result = resolve_issues_path(project);
+        assert_eq!(result, worktree_beads.join("issues.jsonl"));
+    }
+
+    #[test]
+    fn test_resolve_sync_branch_with_other_keys() {
+        // Config has other keys alongside sync-branch
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path();
+        let beads_dir = project.join(".beads");
+        std::fs::create_dir_all(&beads_dir).unwrap();
+        std::fs::write(
+            beads_dir.join("config.yaml"),
+            "issue-prefix: myproject\nsync-branch: beads-sync\nno-db: true\n",
+        )
+        .unwrap();
+
+        let worktree_beads = project
+            .join(".git")
+            .join("beads-worktrees")
+            .join("beads-sync")
+            .join(".beads");
+        std::fs::create_dir_all(&worktree_beads).unwrap();
+
+        let result = resolve_issues_path(project);
+        assert_eq!(result, worktree_beads.join("issues.jsonl"));
+    }
+
+    #[test]
+    fn test_resolve_sync_branch_null_value() {
+        // sync-branch set to YAML null -> default path
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path();
+        let beads_dir = project.join(".beads");
+        std::fs::create_dir_all(&beads_dir).unwrap();
+        std::fs::write(
+            beads_dir.join("config.yaml"),
+            "sync-branch: null\n",
+        )
+        .unwrap();
+
+        let result = resolve_issues_path(project);
+        assert_eq!(result, project.join(".beads").join("issues.jsonl"));
+    }
+
+    #[test]
+    fn test_resolve_no_beads_dir() {
+        // No .beads directory at all -> default path (read fails gracefully)
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path();
+        // Do NOT create .beads/
+
+        let result = resolve_issues_path(project);
+        assert_eq!(result, project.join(".beads").join("issues.jsonl"));
     }
 }
