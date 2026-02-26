@@ -3,6 +3,7 @@
 //! An Axum-based HTTP server that serves the beads-kanban-ui frontend
 //! and provides API endpoints for backend functionality.
 
+mod backend;
 mod db;
 mod routes;
 
