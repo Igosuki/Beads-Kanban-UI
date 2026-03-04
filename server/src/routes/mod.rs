@@ -14,7 +14,6 @@ pub mod watch;
 pub mod worktree;
 
 pub use projects::project_routes;
-pub use watch::watch_beads;
 
 use axum::{response::IntoResponse, Json};
 use directories::UserDirs;

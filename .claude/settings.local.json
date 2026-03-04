@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.dolthub.com)",
+      "WebFetch(domain:github.com)"
+    ]
+  }
+}

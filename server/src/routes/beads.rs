@@ -3,7 +3,7 @@
 //! Provides endpoints for reading and modifying beads from .beads/issues.jsonl files.
 
 use axum::{
-    extract::Query,
+    extract::{Query, State},
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -15,6 +15,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use super::validate_path_security;
+use crate::backend::detect::SharedBackendRegistry;
+use crate::backend::BeadsError;
 
 /// Resolves the correct path to `issues.jsonl` for a project.
 ///
@@ -69,10 +71,10 @@ pub struct BeadsParams {
 
 /// A dependency relationship in the JSONL file.
 #[derive(Debug, Deserialize, Clone)]
-struct Dependency {
-    depends_on_id: String,
+pub struct Dependency {
+    pub depends_on_id: String,
     #[serde(rename = "type")]
-    dep_type: String,
+    pub dep_type: String,
 }
 
 /// A single bead/issue from the JSONL file.
@@ -112,7 +114,7 @@ pub struct Bead {
     #[serde(default)]
     pub relates_to: Option<Vec<String>>,
     #[serde(default, skip_serializing)]
-    dependencies: Option<Vec<Dependency>>,
+    pub dependencies: Option<Vec<Dependency>>,
 }
 
 /// A comment on a bead.
@@ -127,9 +129,12 @@ pub struct Comment {
 
 /// GET /api/beads?path=/path/to/project
 ///
-/// Reads the .beads/issues.jsonl file from the specified project path
+/// Reads beads for the specified project path via the backend registry
 /// and returns an array of beads.
-pub async fn read_beads(Query(params): Query<BeadsParams>) -> impl IntoResponse {
+pub async fn read_beads(
+    State(registry): State<SharedBackendRegistry>,
+    Query(params): Query<BeadsParams>,
+) -> impl IntoResponse {
     let project_path = PathBuf::from(&params.path);
 
     // Security: Validate path is within allowed directories
@@ -140,132 +145,32 @@ pub async fn read_beads(Query(params): Query<BeadsParams>) -> impl IntoResponse 
         );
     }
 
-    let issues_path = resolve_issues_path(&project_path);
-
-    // Check if the file exists
-    if !issues_path.exists() {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({ "error": "No .beads/issues.jsonl found at the specified path" })),
-        );
-    }
-
-    // Read the file contents
-    let contents = match std::fs::read_to_string(&issues_path) {
-        Ok(c) => c,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": format!("Failed to read file: {}", e) })),
-            );
+    // Get or create the backend for this project
+    let backend = {
+        let mut reg = registry.write().await;
+        match reg.get_or_create(&project_path) {
+            Ok(b) => b,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "error": format!("Failed to initialize backend: {}", e) })),
+                );
+            }
         }
     };
 
-    // Parse JSONL (each line is a JSON object)
-    let mut beads = Vec::new();
-    for (line_num, line) in contents.lines().enumerate() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-
-        match serde_json::from_str::<Bead>(line) {
-            Ok(bead) => beads.push(bead),
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to parse bead at line {}: {} - {}",
-                    line_num + 1,
-                    e,
-                    line
-                );
-                // Continue parsing other lines - graceful handling of malformed lines
-            }
-        }
+    // Read beads via backend trait
+    match backend.read_beads(&project_path).await {
+        Ok(beads) => (StatusCode::OK, Json(serde_json::json!({ "beads": beads }))),
+        Err(BeadsError::NotFound(msg)) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": msg })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": format!("{}", e) })),
+        ),
     }
-
-    // Post-process: Transform dependencies into parent_id and children
-    // Build a map of parent_id -> Vec<child_id>
-    let mut parent_to_children: std::collections::HashMap<String, Vec<String>> =
-        std::collections::HashMap::new();
-
-    // First pass: Extract parent-child relationships from explicit dependencies
-    for bead in &mut beads {
-        if let Some(deps) = &bead.dependencies {
-            for dep in deps {
-                if dep.dep_type == "parent-child" {
-                    // Set parent_id on this bead
-                    bead.parent_id = Some(dep.depends_on_id.clone());
-                    // Record this bead as a child of the parent
-                    parent_to_children
-                        .entry(dep.depends_on_id.clone())
-                        .or_default()
-                        .push(bead.id.clone());
-                }
-            }
-        }
-    }
-
-    // Second pass: Infer parent-child from ID patterns (e.g., "64n.1" -> parent "64n")
-    // This matches how the bd CLI infers relationships when parent_id is not set
-    // Collect existing bead IDs first to avoid borrow issues
-    let bead_ids: std::collections::HashSet<String> =
-        beads.iter().map(|b| b.id.clone()).collect();
-
-    // Collect inferred relationships: (child_id, parent_id)
-    let inferred: Vec<(String, String)> = beads
-        .iter()
-        .filter_map(|bead| {
-            // Only infer if parent_id is not already set
-            if bead.parent_id.is_some() {
-                return None;
-            }
-            // Check if ID contains a dot (indicating potential child)
-            let dot_pos = bead.id.rfind('.')?;
-            let potential_parent = &bead.id[..dot_pos];
-            // Only infer if the parent exists
-            if bead_ids.contains(potential_parent) {
-                Some((bead.id.clone(), potential_parent.to_string()))
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    // Apply inferred relationships
-    for (child_id, inferred_parent_id) in &inferred {
-        // Set parent_id on the child bead
-        if let Some(bead) = beads.iter_mut().find(|b| &b.id == child_id) {
-            bead.parent_id = Some(inferred_parent_id.clone());
-        }
-        // Record in parent_to_children map
-        parent_to_children
-            .entry(inferred_parent_id.clone())
-            .or_default()
-            .push(child_id.clone());
-    }
-
-    // Third pass: Set children on parent beads
-    for bead in &mut beads {
-        if let Some(children) = parent_to_children.get(&bead.id) {
-            bead.children = Some(children.clone());
-        }
-    }
-
-    // Fourth pass: Extract relates-to dependencies into relates_to field
-    for bead in &mut beads {
-        if let Some(deps) = &bead.dependencies {
-            let related: Vec<String> = deps
-                .iter()
-                .filter(|dep| dep.dep_type == "relates-to")
-                .map(|dep| dep.depends_on_id.clone())
-                .collect();
-            if !related.is_empty() {
-                bead.relates_to = Some(related);
-            }
-        }
-    }
-
-    (StatusCode::OK, Json(serde_json::json!({ "beads": beads })))
 }
 
 /// Request body for adding a comment to a bead.
@@ -292,8 +197,11 @@ pub struct AddCommentResponse {
 
 /// POST /api/beads/comment
 ///
-/// Adds a comment to a specific bead in the .beads/issues.jsonl file.
-pub async fn add_comment(Json(payload): Json<AddCommentRequest>) -> impl IntoResponse {
+/// Adds a comment to a specific bead via the backend registry.
+pub async fn add_comment(
+    State(registry): State<SharedBackendRegistry>,
+    Json(payload): Json<AddCommentRequest>,
+) -> impl IntoResponse {
     let project_path = PathBuf::from(&payload.path);
 
     // Security: Validate path is within allowed directories
@@ -308,169 +216,54 @@ pub async fn add_comment(Json(payload): Json<AddCommentRequest>) -> impl IntoRes
         );
     }
 
-    let issues_path = resolve_issues_path(&project_path);
-
-    // Check if the file exists
-    if !issues_path.exists() {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(AddCommentResponse {
-                success: false,
-                bead: None,
-                error: Some("No .beads/issues.jsonl found at the specified path".to_string()),
-            }),
-        );
-    }
-
-    // Read the file contents
-    let contents = match std::fs::read_to_string(&issues_path) {
-        Ok(c) => c,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(AddCommentResponse {
-                    success: false,
-                    bead: None,
-                    error: Some(format!("Failed to read file: {}", e)),
-                }),
-            );
-        }
-    };
-
-    // Parse JSONL and find the target bead
-    let mut beads: Vec<Bead> = Vec::new();
-    let mut found_bead_index: Option<usize> = None;
-    let mut max_comment_id: i64 = 0;
-
-    for (line_num, line) in contents.lines().enumerate() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-
-        match serde_json::from_str::<Bead>(line) {
-            Ok(bead) => {
-                // Track the maximum comment ID across all beads
-                if let Some(comments) = &bead.comments {
-                    for comment in comments {
-                        if comment.id > max_comment_id {
-                            max_comment_id = comment.id;
-                        }
-                    }
-                }
-
-                if bead.id == payload.bead_id {
-                    found_bead_index = Some(beads.len());
-                }
-                beads.push(bead);
-            }
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to parse bead at line {}: {} - {}",
-                    line_num + 1,
-                    e,
-                    line
-                );
-                // Continue parsing other lines - graceful handling of malformed lines
-            }
-        }
-    }
-
-    // Check if the bead was found
-    let bead_index = match found_bead_index {
-        Some(idx) => idx,
-        None => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(AddCommentResponse {
-                    success: false,
-                    bead: None,
-                    error: Some(format!("Bead with id '{}' not found", payload.bead_id)),
-                }),
-            );
-        }
-    };
-
-    // Create the new comment
-    let new_comment = Comment {
-        id: max_comment_id + 1,
-        issue_id: payload.bead_id.clone(),
-        author: payload.author,
-        text: payload.text,
-        created_at: Utc::now().to_rfc3339(),
-    };
-
-    // Add the comment to the bead
-    let bead = &mut beads[bead_index];
-    match &mut bead.comments {
-        Some(comments) => comments.push(new_comment),
-        None => bead.comments = Some(vec![new_comment]),
-    }
-
-    // Write the updated beads back to the file
-    let file = match std::fs::File::create(&issues_path) {
-        Ok(f) => f,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(AddCommentResponse {
-                    success: false,
-                    bead: None,
-                    error: Some(format!("Failed to open file for writing: {}", e)),
-                }),
-            );
-        }
-    };
-
-    let mut writer = std::io::BufWriter::new(file);
-    for bead in &beads {
-        match serde_json::to_string(bead) {
-            Ok(json_line) => {
-                if let Err(e) = writeln!(writer, "{}", json_line) {
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(AddCommentResponse {
-                            success: false,
-                            bead: None,
-                            error: Some(format!("Failed to write to file: {}", e)),
-                        }),
-                    );
-                }
-            }
+    // Get or create the backend for this project
+    let backend = {
+        let mut reg = registry.write().await;
+        match reg.get_or_create(&project_path) {
+            Ok(b) => b,
             Err(e) => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(AddCommentResponse {
                         success: false,
                         bead: None,
-                        error: Some(format!("Failed to serialize bead: {}", e)),
+                        error: Some(format!("Failed to initialize backend: {}", e)),
                     }),
                 );
             }
         }
-    }
+    };
 
-    if let Err(e) = writer.flush() {
-        return (
+    // Add comment via backend trait
+    match backend
+        .add_comment(&project_path, &payload.bead_id, &payload.text, &payload.author)
+        .await
+    {
+        Ok(updated_bead) => (
+            StatusCode::OK,
+            Json(AddCommentResponse {
+                success: true,
+                bead: Some(updated_bead),
+                error: None,
+            }),
+        ),
+        Err(BeadsError::NotFound(msg)) => (
+            StatusCode::NOT_FOUND,
+            Json(AddCommentResponse {
+                success: false,
+                bead: None,
+                error: Some(msg),
+            }),
+        ),
+        Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(AddCommentResponse {
                 success: false,
                 bead: None,
-                error: Some(format!("Failed to flush file: {}", e)),
+                error: Some(format!("{}", e)),
             }),
-        );
+        ),
     }
-
-    // Return the updated bead
-    let updated_bead = beads.swap_remove(bead_index);
-    (
-        StatusCode::OK,
-        Json(AddCommentResponse {
-            success: true,
-            bead: Some(updated_bead),
-            error: None,
-        }),
-    )
 }
 
 /// Computes the appropriate status for an epic based on its children's statuses.

@@ -1,24 +1,18 @@
 //! File watcher SSE endpoint for real-time file change notifications.
 //!
 //! Provides Server-Sent Events for monitoring changes to beads issue files.
-//! When the beads file changes, this module also recomputes epic statuses
-//! based on their children's statuses.
+//! Delegates to the backend registry to obtain a per-project watch stream.
 
 use axum::{
-    extract::Query,
+    extract::{Query, State},
     response::sse::{Event, Sse},
 };
 use futures::stream::Stream;
-use notify::{
-    event::ModifyKind, Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
-};
 use serde::{Deserialize, Serialize};
 use std::{convert::Infallible, path::PathBuf, time::Duration};
-use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream;
-use tracing::{error, info, warn};
+use tokio_stream::StreamExt as _;
 
-use super::beads::{recompute_epic_statuses, resolve_issues_path};
+use crate::backend::detect::SharedBackendRegistry;
 
 /// Query parameters for the watch endpoint.
 #[derive(Debug, Deserialize)]
@@ -39,8 +33,8 @@ pub struct FileChangeEvent {
 
 /// SSE endpoint for watching beads file changes.
 ///
-/// Monitors the `.beads/issues.jsonl` file in the specified project path
-/// and sends SSE events when changes are detected.
+/// Obtains a watch stream from the backend for the specified project path
+/// and forwards events as Server-Sent Events to the client.
 ///
 /// # Query Parameters
 ///
@@ -50,160 +44,42 @@ pub struct FileChangeEvent {
 ///
 /// A Server-Sent Events stream of file change notifications.
 pub async fn watch_beads(
+    State(registry): State<SharedBackendRegistry>,
     Query(params): Query<WatchParams>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let project_path = PathBuf::from(&params.path);
-    let beads_file = resolve_issues_path(&project_path);
 
-    info!("Starting file watcher for: {:?}", beads_file);
+    // Get or create the backend for this project.
+    // If the registry fails, return an empty stream (the SSE connection will
+    // close immediately — the client will reconnect and retry).
+    let backend = {
+        let mut reg = registry.write().await;
+        reg.get_or_create(&project_path).ok()
+    };
 
-    // Create channel for events with buffer for debouncing
-    let (tx, rx) = mpsc::channel::<Result<Event, Infallible>>(100);
-
-    // Spawn the watcher task
-    tokio::spawn(async move {
-        if let Err(e) = run_watcher(beads_file, tx).await {
-            error!("File watcher error: {}", e);
+    let stream = match backend {
+        Some(b) => {
+            // Obtain the raw FileChangeEvent stream from the backend, then map
+            // each event to an SSE Event with JSON-encoded data.
+            let raw = b.watch(project_path);
+            let sse_stream = raw.map(|event| {
+                let data = serde_json::to_string(&event).unwrap_or_default();
+                Ok::<Event, Infallible>(Event::default().data(data))
+            });
+            // Box to unify types for the two branches.
+            Box::pin(sse_stream) as std::pin::Pin<Box<dyn Stream<Item = Result<Event, Infallible>> + Send>>
         }
-    });
+        None => {
+            // Backend unavailable — return an empty stream.
+            Box::pin(futures::stream::empty()) as std::pin::Pin<Box<dyn Stream<Item = Result<Event, Infallible>> + Send>>
+        }
+    };
 
-    let stream = ReceiverStream::new(rx);
     Sse::new(stream).keep_alive(
         axum::response::sse::KeepAlive::new()
             .interval(Duration::from_secs(30))
             .text("ping"),
     )
-}
-
-/// Runs the file watcher and sends events through the channel.
-async fn run_watcher(
-    beads_file: PathBuf,
-    tx: mpsc::Sender<Result<Event, Infallible>>,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Create a channel for notify events
-    let (notify_tx, mut notify_rx) = mpsc::channel(100);
-
-    // Create the watcher
-    let mut watcher = RecommendedWatcher::new(
-        move |res: notify::Result<notify::Event>| {
-            if let Ok(event) = res {
-                // Only forward relevant events
-                let _ = notify_tx.blocking_send(event);
-            }
-        },
-        Config::default().with_poll_interval(Duration::from_millis(100)),
-    )?;
-
-    // Watch the parent directory (.beads) since the file might not exist yet
-    let watch_path = beads_file
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| beads_file.clone());
-
-    // Create the .beads directory if it doesn't exist
-    if !watch_path.exists() {
-        warn!(
-            "Watch path does not exist, waiting for creation: {:?}",
-            watch_path
-        );
-    }
-
-    // Try to watch the path, or watch parent if it doesn't exist
-    let actual_watch_path = if watch_path.exists() {
-        watch_path.clone()
-    } else if let Some(parent) = watch_path.parent() {
-        if parent.exists() {
-            parent.to_path_buf()
-        } else {
-            error!("Neither watch path nor parent exists: {:?}", watch_path);
-            return Ok(());
-        }
-    } else {
-        error!("No valid path to watch: {:?}", watch_path);
-        return Ok(());
-    };
-
-    watcher.watch(&actual_watch_path, RecursiveMode::Recursive)?;
-    info!("File watcher active on: {:?}", actual_watch_path);
-
-    // Send initial connection event
-    let connect_event = Event::default().data(
-        serde_json::to_string(&FileChangeEvent {
-            path: beads_file.to_string_lossy().to_string(),
-            change_type: "connected".to_string(),
-        })
-        .unwrap_or_default(),
-    );
-    let _ = tx.send(Ok(connect_event)).await;
-
-    // Debounce state
-    let mut last_event_time = std::time::Instant::now();
-    let debounce_duration = Duration::from_millis(100);
-
-    // Process events
-    while let Some(event) = notify_rx.recv().await {
-        // Check if the event is for our target file
-        let is_relevant = event.paths.iter().any(|p| {
-            p.ends_with("issues.jsonl")
-                || p.ends_with(".beads")
-                || p == &beads_file
-        });
-
-        if !is_relevant {
-            continue;
-        }
-
-        // Debounce rapid changes
-        let now = std::time::Instant::now();
-        if now.duration_since(last_event_time) < debounce_duration {
-            continue;
-        }
-        last_event_time = now;
-
-        // Determine event type
-        let change_type = match event.kind {
-            EventKind::Create(_) => "created",
-            EventKind::Modify(ModifyKind::Data(_)) => "modified",
-            EventKind::Modify(_) => "modified",
-            EventKind::Remove(_) => "removed",
-            _ => continue, // Ignore other events
-        };
-
-        let file_event = FileChangeEvent {
-            path: beads_file.to_string_lossy().to_string(),
-            change_type: change_type.to_string(),
-        };
-
-        info!("File change detected: {:?}", file_event);
-
-        // Recompute epic statuses when beads file is modified
-        // This ensures epic status stays in sync with children
-        if change_type == "modified" || change_type == "created" {
-            match recompute_epic_statuses(&beads_file) {
-                Ok(updated_epics) => {
-                    if !updated_epics.is_empty() {
-                        info!("Updated epic statuses: {:?}", updated_epics);
-                    }
-                }
-                Err(e) => {
-                    warn!("Failed to recompute epic statuses: {}", e);
-                }
-            }
-        }
-
-        let sse_event = Event::default()
-            .data(serde_json::to_string(&file_event).unwrap_or_default());
-
-        // If send fails, client disconnected
-        if tx.send(Ok(sse_event)).await.is_err() {
-            info!("Client disconnected, stopping watcher");
-            break;
-        }
-    }
-
-    // Watcher is automatically dropped and cleaned up here
-    info!("File watcher stopped");
-    Ok(())
 }
 
 #[cfg(test)]

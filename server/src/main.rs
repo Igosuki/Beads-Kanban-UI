@@ -3,6 +3,7 @@
 //! An Axum-based HTTP server that serves the beads-kanban-ui frontend
 //! and provides API endpoints for backend functionality.
 
+mod backend;
 mod db;
 mod routes;
 
@@ -19,6 +20,8 @@ use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
+
+use backend::detect::{BackendRegistry, SharedBackendRegistry};
 
 /// Embedded static files from the Next.js build output.
 #[derive(Embed)]
@@ -106,12 +109,22 @@ async fn main() {
     );
     info!("Database initialized");
 
+    // Initialize the backend registry (shared across all backend-powered routes)
+    let backend_registry: SharedBackendRegistry =
+        Arc::new(tokio::sync::RwLock::new(BackendRegistry::new()));
+
+    // Routes that require the backend registry state
+    let backend_routes = Router::new()
+        .route("/api/beads", get(routes::beads::read_beads))
+        .route("/api/beads/comment", post(routes::beads::add_comment))
+        .route("/api/watch/beads", get(routes::watch::watch_beads))
+        .with_state(backend_registry);
+
     // Build the router
     let app = Router::new()
         .route("/api/health", get(routes::health))
         .nest("/api", routes::project_routes().with_state(database))
-        .route("/api/beads", get(routes::beads::read_beads))
-        .route("/api/beads/comment", post(routes::beads::add_comment))
+        .merge(backend_routes)
         .route("/api/fs/list", get(routes::fs::list_directory))
         .route("/api/fs/exists", get(routes::fs::path_exists))
         .route("/api/fs/read", get(routes::fs::read_file))
@@ -140,7 +153,6 @@ async fn main() {
                 .delete(routes::memory::delete_memory),
         )
         .route("/api/memory/stats", get(routes::memory::memory_stats))
-        .route("/api/watch/beads", get(routes::watch_beads))
         .fallback(serve_static)
         .layer(cors);
 
