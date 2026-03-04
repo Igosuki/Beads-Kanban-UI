@@ -1,10 +1,14 @@
 "use client";
 
-import { PackageOpen } from "lucide-react";
+import { useState } from "react";
+
+import { PackageOpen, Plus } from "lucide-react";
 
 import { BeadCard } from "@/components/bead-card";
+import { CreateBeadDialog } from "@/components/create-bead-dialog";
 import { EpicCard } from "@/components/epic-card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type { Bead, BeadStatus, Epic } from "@/types";
@@ -104,6 +108,8 @@ export function KanbanColumn({
   projectPath,
   onUpdate,
 }: KanbanColumnProps) {
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+
   return (
     <div
       className={cn(
@@ -116,7 +122,17 @@ export function KanbanColumn({
         "flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-zinc-800/50",
         getColumnAccentBorder(status)
       )}>
-        <h2 className={cn("font-semibold text-sm", getHeaderTextColor(status))}>{title}</h2>
+        <div className="flex items-center gap-2">
+          <h2 className={cn("font-semibold text-sm", getHeaderTextColor(status))}>{title}</h2>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6 text-zinc-500 hover:text-zinc-300"
+            onClick={() => setCreateDialogOpen(true)}
+          >
+            <Plus className="size-3.5" />
+          </Button>
+        </div>
         <Badge
           variant="secondary"
           className={cn("text-xs px-2 py-0.5", getBadgeVariant(status))}
@@ -165,6 +181,12 @@ export function KanbanColumn({
           )}
         </div>
       </ScrollArea>
+      <CreateBeadDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        projectPath={projectPath}
+        onCreated={onUpdate}
+      />
     </div>
   );
 }
