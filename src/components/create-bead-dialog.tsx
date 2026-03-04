@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Loader2 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -36,12 +37,14 @@ export function CreateBeadDialog({
   const [description, setDescription] = useState("");
   const [beadType, setBeadType] = useState<BeadType>("task");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [previewMode, setPreviewMode] = useState(false);
   const { toast } = useToast();
 
   const resetForm = () => {
     setTitle("");
     setDescription("");
     setBeadType("task");
+    setPreviewMode(false);
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -88,7 +91,7 @@ export function CreateBeadDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Create Bead</DialogTitle>
           <DialogDescription>
@@ -113,17 +116,44 @@ export function CreateBeadDialog({
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="bead-description" className="text-sm font-medium text-zinc-300">
-                Description
-              </label>
-              <textarea
-                id="bead-description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Optional description"
-                rows={4}
-                className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-              />
+              <div className="flex items-center justify-between">
+                <label htmlFor="bead-description" className="text-sm font-medium text-zinc-300">
+                  Description <span className="text-xs text-zinc-500 ml-1">Markdown supported</span>
+                </label>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    className={`px-2 py-0.5 text-xs rounded ${!previewMode ? "bg-zinc-700 text-zinc-200" : "text-zinc-500 hover:text-zinc-300"}`}
+                    onClick={() => setPreviewMode(false)}
+                  >
+                    Write
+                  </button>
+                  <button
+                    type="button"
+                    className={`px-2 py-0.5 text-xs rounded ${previewMode ? "bg-zinc-700 text-zinc-200" : "text-zinc-500 hover:text-zinc-300"}`}
+                    onClick={() => setPreviewMode(true)}
+                  >
+                    Preview
+                  </button>
+                </div>
+              </div>
+              {previewMode ? (
+                <div className="min-h-[200px] max-h-[400px] overflow-y-auto rounded-md border border-input bg-transparent px-3 py-2 text-sm prose prose-invert prose-sm max-w-none">
+                  {description.trim() ? (
+                    <ReactMarkdown>{description}</ReactMarkdown>
+                  ) : (
+                    <p className="text-muted-foreground italic">Nothing to preview</p>
+                  )}
+                </div>
+              ) : (
+                <textarea
+                  id="bead-description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Optional description (Markdown supported)"
+                  className="flex w-full min-h-[200px] max-h-[400px] rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-y"
+                />
+              )}
             </div>
 
             <div className="space-y-2">
