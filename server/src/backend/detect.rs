@@ -11,6 +11,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::backend::{BeadsBackend, BeadsError};
+use crate::backend::jsonl::JsonlBackend;
 
 /// The type of storage backend detected for a project.
 #[allow(dead_code)]
@@ -28,7 +29,6 @@ pub enum BackendType {
 /// 1. If `.beads/config.yaml` exists and contains `no-db: true` → [`BackendType::Jsonl`]
 /// 2. If `.beads/dolt/` directory exists → [`BackendType::Dolt`]
 /// 3. Fallback → [`BackendType::Jsonl`]
-#[allow(dead_code)]
 pub fn detect_backend(project_path: &Path) -> BackendType {
     let config_path = project_path.join(".beads").join("config.yaml");
 
@@ -51,52 +51,12 @@ pub fn detect_backend(project_path: &Path) -> BackendType {
     BackendType::Jsonl
 }
 
-/// Stub JSONL backend used until the full JsonlBackend is implemented in a
-/// later task.  Every method returns an error so that the stub cannot silently
-/// corrupt state.
-#[allow(dead_code)]
-pub struct JsonlBackend;
-
-#[async_trait::async_trait]
-impl BeadsBackend for JsonlBackend {
-    async fn read_beads(
-        &self,
-        _project_path: &Path,
-    ) -> Result<Vec<crate::backend::Bead>, BeadsError> {
-        Err(BeadsError::Database(
-            "JsonlBackend not yet implemented".into(),
-        ))
-    }
-
-    async fn add_comment(
-        &self,
-        _project_path: &Path,
-        _bead_id: &str,
-        _text: &str,
-        _author: &str,
-    ) -> Result<crate::backend::Bead, BeadsError> {
-        Err(BeadsError::Database(
-            "JsonlBackend not yet implemented".into(),
-        ))
-    }
-
-    fn watch(
-        &self,
-        _project_path: PathBuf,
-    ) -> std::pin::Pin<
-        Box<dyn futures::stream::Stream<Item = crate::backend::FileChangeEvent> + Send>,
-    > {
-        Box::pin(futures::stream::empty())
-    }
-}
-
 /// Registry that lazily creates and caches backend instances per project path.
 ///
 /// The registry detects the appropriate backend type on first access and
 /// returns a shared [`Arc<dyn BeadsBackend>`] for subsequent calls with the
 /// same path.
 pub struct BackendRegistry {
-    #[allow(dead_code)]
     backends: HashMap<PathBuf, Arc<dyn BeadsBackend>>,
 }
 
@@ -112,7 +72,6 @@ impl BackendRegistry {
     ///
     /// On the first call for a path the backend type is detected, the instance
     /// is created and cached.  Subsequent calls return the cached [`Arc`].
-    #[allow(dead_code)]
     pub fn get_or_create(
         &mut self,
         project_path: &Path,
@@ -227,7 +186,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut registry = BackendRegistry::new();
 
-        // Should succeed -- falls back to JsonlBackend stub
+        // Should succeed -- falls back to real JsonlBackend
         let result = registry.get_or_create(tmp.path());
         assert!(result.is_ok());
     }
