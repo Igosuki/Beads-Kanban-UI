@@ -127,7 +127,7 @@ export function KanbanColumn({
           <Button
             variant="ghost"
             size="icon"
-            className="size-6 text-zinc-500 hover:text-zinc-300"
+            className="size-6 text-zinc-400 hover:text-zinc-200"
             onClick={() => setCreateDialogOpen(true)}
           >
             <Plus className="size-3.5" />

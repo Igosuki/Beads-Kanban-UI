@@ -86,9 +86,19 @@ impl BackendRegistry {
         let backend: Arc<dyn BeadsBackend> = match detect_backend(project_path) {
             BackendType::Jsonl => Arc::new(JsonlBackend),
             BackendType::Dolt => {
-                return Err(BeadsError::Database(
-                    "Dolt backend not yet implemented".into(),
-                ));
+                // Dolt backend not yet implemented; fall back to JSONL if issues.jsonl exists
+                let jsonl_path = project_path.join(".beads").join("issues.jsonl");
+                if jsonl_path.exists() {
+                    tracing::warn!(
+                        "Dolt backend not yet implemented for {}; falling back to JSONL",
+                        project_path.display()
+                    );
+                    Arc::new(JsonlBackend)
+                } else {
+                    return Err(BeadsError::Database(
+                        "Dolt backend not yet implemented and no issues.jsonl fallback found".into(),
+                    ));
+                }
             }
         };
 
@@ -192,7 +202,7 @@ mod tests {
     }
 
     #[test]
-    fn registry_returns_error_for_dolt_project() {
+    fn registry_returns_error_for_dolt_project_without_jsonl() {
         let tmp = tempfile::tempdir().unwrap();
         let beads_dir = make_beads_dir(&tmp);
         std::fs::create_dir_all(beads_dir.join("dolt")).unwrap();
@@ -201,6 +211,18 @@ mod tests {
         let result = registry.get_or_create(tmp.path());
         let err = result.err().expect("expected an error");
         assert!(matches!(err, BeadsError::Database(_)));
+    }
+
+    #[test]
+    fn registry_falls_back_to_jsonl_for_dolt_with_jsonl() {
+        let tmp = tempfile::tempdir().unwrap();
+        let beads_dir = make_beads_dir(&tmp);
+        std::fs::create_dir_all(beads_dir.join("dolt")).unwrap();
+        std::fs::write(beads_dir.join("issues.jsonl"), "").unwrap();
+
+        let mut registry = BackendRegistry::new();
+        let result = registry.get_or_create(tmp.path());
+        assert!(result.is_ok());
     }
 
     #[test]
