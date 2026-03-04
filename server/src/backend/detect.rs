@@ -8,9 +8,11 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::backend::{BeadsBackend, BeadsError};
+use crate::backend::dolt::DoltBackend;
+use crate::backend::dolt_server::DoltServerManager;
 use crate::backend::jsonl::JsonlBackend;
 
 /// The type of storage backend detected for a project.
@@ -58,6 +60,7 @@ pub fn detect_backend(project_path: &Path) -> BackendType {
 /// same path.
 pub struct BackendRegistry {
     backends: HashMap<PathBuf, Arc<dyn BeadsBackend>>,
+    dolt_server_manager: Arc<Mutex<DoltServerManager>>,
 }
 
 impl BackendRegistry {
@@ -65,6 +68,7 @@ impl BackendRegistry {
     pub fn new() -> Self {
         Self {
             backends: HashMap::new(),
+            dolt_server_manager: Arc::new(Mutex::new(DoltServerManager::new())),
         }
     }
 
@@ -85,21 +89,7 @@ impl BackendRegistry {
 
         let backend: Arc<dyn BeadsBackend> = match detect_backend(project_path) {
             BackendType::Jsonl => Arc::new(JsonlBackend),
-            BackendType::Dolt => {
-                // Dolt backend not yet implemented; fall back to JSONL if issues.jsonl exists
-                let jsonl_path = project_path.join(".beads").join("issues.jsonl");
-                if jsonl_path.exists() {
-                    tracing::warn!(
-                        "Dolt backend not yet implemented for {}; falling back to JSONL",
-                        project_path.display()
-                    );
-                    Arc::new(JsonlBackend)
-                } else {
-                    return Err(BeadsError::Database(
-                        "Dolt backend not yet implemented and no issues.jsonl fallback found".into(),
-                    ));
-                }
-            }
+            BackendType::Dolt => Arc::new(DoltBackend::new(Arc::clone(&self.dolt_server_manager))),
         };
 
         self.backends.insert(key, Arc::clone(&backend));
@@ -202,23 +192,10 @@ mod tests {
     }
 
     #[test]
-    fn registry_returns_error_for_dolt_project_without_jsonl() {
+    fn registry_creates_dolt_backend_for_dolt_project() {
         let tmp = tempfile::tempdir().unwrap();
         let beads_dir = make_beads_dir(&tmp);
         std::fs::create_dir_all(beads_dir.join("dolt")).unwrap();
-
-        let mut registry = BackendRegistry::new();
-        let result = registry.get_or_create(tmp.path());
-        let err = result.err().expect("expected an error");
-        assert!(matches!(err, BeadsError::Database(_)));
-    }
-
-    #[test]
-    fn registry_falls_back_to_jsonl_for_dolt_with_jsonl() {
-        let tmp = tempfile::tempdir().unwrap();
-        let beads_dir = make_beads_dir(&tmp);
-        std::fs::create_dir_all(beads_dir.join("dolt")).unwrap();
-        std::fs::write(beads_dir.join("issues.jsonl"), "").unwrap();
 
         let mut registry = BackendRegistry::new();
         let result = registry.get_or_create(tmp.path());
