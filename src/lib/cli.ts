@@ -120,30 +120,52 @@ export async function closeBead(beadId: string, cwd?: string): Promise<void> {
 }
 
 /**
+ * Options for creating a bead
+ */
+export interface CreateBeadOptions {
+  /** Issue type. Defaults to "task". When set to "epic", passes --type epic to bd create. */
+  type?: "task" | "epic";
+  /** Priority level to pass to bd create via --priority flag. */
+  priority?: string;
+}
+
+/**
  * Create a new bead
  *
- * Executes: bd create "<title>" -d "<description>"
+ * Executes: bd create "<title>" -d "<description>" [--type <type>] [--priority <priority>]
  *
  * @param title - The bead title
  * @param description - The bead description
  * @param cwd - Working directory (project path)
+ * @param options - Optional creation parameters (type, priority)
  * @returns The created bead ID (if parseable from output)
  * @throws Error if command fails
  *
  * @example
  * ```typescript
  * const id = await createBead('Fix bug', 'Bug in login form', '/path/to/project');
+ * const epicId = await createBead('New epic', 'Epic description', '/path/to/project', { type: 'epic' });
+ * const prioId = await createBead('Urgent fix', 'Details', '/path/to/project', { priority: 'high' });
  * ```
  */
 export async function createBead(
   title: string,
   description: string,
-  cwd?: string
+  cwd?: string,
+  options?: CreateBeadOptions
 ): Promise<string | null> {
-  const result = await executeBdCommand(
-    ["create", title, "-d", description],
-    cwd
-  );
+  const args = ["create", title, "-d", description];
+
+  const type = options?.type ?? "task";
+  if (type !== "task") {
+    args.push("--type", type);
+  }
+
+  if (options?.priority !== undefined) {
+    args.push("--priority", options.priority);
+  }
+
+  const result = await executeBdCommand(args, cwd);
 
   if (!result.success) {
     throw new Error(result.stderr || `Failed to create bead: exit code ${result.code}`);
