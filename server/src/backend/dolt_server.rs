@@ -285,6 +285,7 @@ fn build_connection(host: &str, port: u16, db_name: &str) -> Result<DoltConnecti
     let opts = OptsBuilder::default()
         .ip_or_hostname(host)
         .tcp_port(port)
+        .user(Some("root"))
         .db_name(Some(db_name))
         .pool_opts(pool_opts);
 
